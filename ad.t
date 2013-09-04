@@ -1,5 +1,6 @@
 local templatize = terralib.require("templatize")
 local Vector = terralib.require("vector")
+local util = terralib.require("util")
 
 local sourcefile = debug.getinfo(1, "S").source:gsub("@", "")
 
@@ -51,7 +52,7 @@ local DualNum = templatize(function (...)
 	end
 
 	-- All dual nums are allocated from the memory pool
-	DualNumT.methods.new = macro(function(val, ...)
+	DualNumT.methods.new = macro(function(val, adjFn, ...)
 		local args = {}
 		for i=1,numExtraFields do
 			table.insert(args, select(i, ...))
@@ -68,6 +69,8 @@ local DualNum = templatize(function (...)
 			dnptr.val = val
 			dnptr.adj = 0.0
 			[makeFields(dnptr)] = [args]
+			numStack:push(dnptr)
+			fnStack:push(adjFn)
 		in
 			dnptr
 		end
@@ -83,12 +86,12 @@ local struct num
 	impl: &DualNumBase
 }
 
+local terra nullAdjointFn(impl: VoidPtr)
+end
+
 num.metamethods.__cast = function(from, to, exp)
 	if from == double and to == num then
-		-- TEMP NOTE: Even base DualNums need an adjoint function
-		-- (the empty function). I think pushing to the stack needs
-		-- to be handled in DualNum.new, somehow...?
-		return `num { DualNumBase.new(exp) }
+		return `num { DualNumBase.new(exp, nullAdjointFn) }
 	else
 		error(string.format("ad.t: Cannot cast '%s' to 'num'", tostring(from)))
 	end
@@ -99,27 +102,43 @@ end
 
 local cmath = terralib.includec("math.h")
 
--- TEMP NOTE: This wraps the below function in a function
--- that expects num in its arguments. It'll unpack the
--- nums into their impls before calling the wrapped function.
-local function wrapADFunction(fn, args)
-	local params = fn:getdefinitions()[1]:gettype().parameters
-	-- ???
+local function symbols(types)
+	local ret = {}
+	for i,t in ipairs(types) do
+		table.insert(ret, symbol(t))
+	end
+	return ret
 end
 
--- TEMP NOTE: This expects to see &DualNumBase in the argTypes
-local function makeADFunction(argTypes, fwdFn, adjFun)
-	local params = {}
-	for i,t in ipairs(argTypes) do
-		table.insert(params, symbol(t))
+-- This wraps the function created by 'makeADFunction' in a function
+-- that expects 'num' in its argument types, instead of &DualNumType
+local function wrapADFunction(fn)
+	local paramtypes = fn:getdefinitions()[1]:gettype().parameters
+	local wrapparams = {}
+	local argexps = {}
+	for i,t in ipairs(paramtypes) do
+		if t == &DualNumBase then
+			t = number
+		end
+		local sym = symbol(t)
+		table.insert(wrapparams, sym)
+		if t == num then
+			table.insert(argexps, `sym.impl)
+		else
+			table.insert(argexps, sym)
+		end
 	end
+	return terra([wrapparams])
+		return fn([argexps])
+	end
+end
+
+-- This expects to see &DualNumBase in the argTypes
+local function makeADFunction(argTypes, fwdFn, adjFun)
+	local params = symbols(argTypes)
 	local DN = DualNum(argTypes)
 	return terra([params])
-		-- TEMP NOTE: This line is wrong; we need to be using the
-		-- DN type!
-		var newnum = num(fwdFn([params]))
-		numStack:push(newnum.impl)
-		fnStack:push(adjFun)
+		var newnum = num { DN.new(fwdFn([params]), [params]) }
 		return newnum
 	end
 end
@@ -136,7 +155,7 @@ local function makeOverloadedADFunction(numArgs, fwdFnTemplate, adjFnTemplate)
 			else
 				table.insert(types, &DualNumBase)
 		end
-		local fn = makeADFunction(types, fwdFnTemplate(types), adjFnTemplate(types))
+		local fn = wrapADFunction(makeADFunction(types, fwdFnTemplate(types), adjFnTemplate(types)))
 		if not overallfn then
 			overallfn = fn
 		else
@@ -146,6 +165,52 @@ local function makeOverloadedADFunction(numArgs, fwdFnTemplate, adjFnTemplate)
 	end
 	return overallfn
 end
+
+
+-- =============== INSTANTIATE ALL THE FUNCTIONS! ===============
+
+local admath = util.copytable(cmath)
+
+local function addADFunction(name, numArgs, fwdFnTemplate, adjFnTemplate)
+	local primalfn = admath[name]
+	if not primalfn then
+		error(string.format("ad.t: Cannot add overloaded dual function '%s' for which there is no primal function in cmath", name))
+	end
+	local dualfn = makeOverloadedADFunction(numArgs, fwdFnTemplate, adjFnTemplate)
+	for i,def in ipairs(dualfn:getdefinitions()) do
+		primalfn:adddefinition(def)
+	end
+end
+
+local function addADOperator(metamethodname, numArgs, fwdFnTemplate, adjFnTemplate)
+	local fn = makeOverloadedADFunction(numArgs, fwdFn, adjFnTemplate)
+	num.metamethods[metamethodname] = fn
+end
+
+-- Extract the numeric value from a number regardless of whether
+-- it is a double or a dual number
+local val = macro(function(v)
+	if v:gettype() == double then
+		return v
+	else
+		return `v.val
+	end
+end)
+
+
+-- -- ADD
+-- addADOperator("__add", 2,
+-- function(types)
+-- 	return terra(n1: types[1], n2: types[2])
+-- 		return val(n1) + val(n2)
+-- 	end
+-- end,
+-- function(types)
+-- 	local DN = DualNum(types)
+-- 	return terra(impl: VoidPtr)
+-- 		--
+-- 	end
+-- end)
 
 
 
