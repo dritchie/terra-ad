@@ -112,7 +112,7 @@ end
 
 local cmath = terralib.includec("math.h")
 
-local function makeADFunction(argTypes, usedArgIndices, fwdFn, adjFn)
+local function makeADFunction(argTypes, fwdFn, adjFn, usedArgIndices)
 
 	local params = {}
 	local paramsimpl = {}
@@ -132,12 +132,11 @@ local function makeADFunction(argTypes, usedArgIndices, fwdFn, adjFn)
 		end
 	end
 
-	local templateTypes = util.index(argTypes, usedArgIndices)
-	local adjUsedParams = util.index(paramsimpl, usedArgIndices)
-	local DN = DualNum(unpack(templateTypes))
-
 	if adjFn then
-		return terra([params])
+		local templateTypes = util.index(argTypes, usedArgIndices)
+		local adjUsedParams = util.index(paramsimpl, usedArgIndices)
+		local DN = DualNum(unpack(templateTypes))
+		return terra([params]) : num
 			return num { [&DualNumBase](DN.new(fwdFn([paramvals]), adjFn, [adjUsedParams])) }
 		end
 	else
@@ -160,8 +159,11 @@ local function makeOverloadedADFunction(numArgs, fwdFn, adjFnTemplate)
 				table.insert(types, &DualNumBase)
 			end
 		end
-		local adjFn, usedargindices = adjFnTemplate(unpack(types))
-		local fn = makeADFunction(types, usedargindices, fwdFn, adjFn)
+		local adjFn, usedargindices = nil, nil
+		if adjFnTemplate then 
+			adjFn, usedargindices = adjFnTemplate(unpack(types))
+		end
+		local fn = makeADFunction(types, fwdFn, adjFn, usedargindices)
 		if not overallfn then
 			overallfn = fn
 		else
@@ -292,7 +294,7 @@ end
 
 local function addADFunction_overloaded(name, numArgs, fwdFn, adjFnTemplate)
 	local dualfn = makeOverloadedADFunction(numArgs, fwdFn, adjFnTemplate)
-	addADFunction_simple(dualfn)
+	addADFunction_simple(name, dualfn)
 end
 
 local function addADFunction(...)
@@ -371,47 +373,37 @@ adjoint(function(T)
 end))
 
 -- EQ
-addADOperator("__eq", 2
+addADOperator("__eq", 2,
 terra(a: double, b: double)
 	return a == b
 end)
 
 -- LT
-addADOperator("__lt", 2
+addADOperator("__lt", 2,
 terra(a: double, b: double)
 	return a < b
 end)
 
 -- LE
-addADOperator("__le", 2
+addADOperator("__le", 2,
 terra(a: double, b: double)
 	return a <= b
 end)
 
 -- GT
-addADOperator("__gt", 2
+addADOperator("__gt", 2,
 terra(a: double, b: double)
 	return a > b
 end)
 
 -- GE
-addADOperator("__lt", 2
+addADOperator("__lt", 2,
 terra(a: double, b: double)
 	return a >= b
 end)
 
 
 ---- Functions ----
-
--- ABS
-addADFunction("abs",
-terra(a: num)
-	if a:val() >= 0.0 then
-		return a
-	else
-		return -a
-	end
-end)
 
 -- ACOS
 addADFunction("acos", 1,
@@ -579,6 +571,82 @@ end,
 adjoint(function(T)
 	return terra(v: &DualNumBase, a: T)
 		setadj(a, adj(a) + v.adj / ([math.log(10.0)]*val(a)))
+	end
+end))
+
+-- POW
+addADFunction("pow", 2,
+terra(a: double, b: double) : double
+	return cmath.pow(a, b)
+end,
+adjoint(function(T1, T2)
+	return terra(v: &DualNumBase, a: T1, b: T2)
+		if val(a) ~= 0.0 then	-- Avoid log(0)
+			setadj(a, adj(a) + v.adj*val(b)*v.val/val(a))
+			setadj(b, adj(b) + v.adj*cmath.log(val(a))*v.val)
+		end
+	end
+end))
+
+-- ROUND
+addADFunction("round",
+terra(a: num)
+	return num(cmath.round(a:val()))
+end)
+
+-- SIN
+addADFunction("sin", 1,
+terra(a: double)
+	return cmath.sin(a)
+end,
+adjoint(function(T)
+	return terra(v: &DualNumBase, a: T)
+		setadj(a, adj(a) + v.adj*cmath.cos(val(a)))
+	end
+end))
+
+-- SINH
+addADFunction("sinh", 1,
+terra(a: double)
+	return cmath.sinh(a)
+end,
+adjoint(function(T)
+	return terra(v: &DualNumBase, a: T)
+		setadj(a, adj(a) + v.adj*cmath.cosh(val(a)))
+	end
+end))
+
+-- SQRT
+addADFunction("sqrt", 1,
+terra(a: double)
+	return cmath.sqrt(a)
+end,
+adjoint(function(T)
+	return terra(v: &DualNumBase, a: T)
+		setadj(a, adj(a) + v.adj / (2.0 * v.val))
+	end
+end))
+
+-- TAN
+addADFunction("tan", 1,
+terra(a: double)
+	return cmath.tan(a)
+end,
+adjoint(function(T)
+	return terra(v: &DualNumBase, a: T)
+		setadj(a, adj(a) + v.adj*(1.0 + v.val*v.val))
+	end
+end))
+
+-- TANH
+addADFunction("tanh", 1,
+terra(a: double)
+	return cmath.tanh(a)
+end,
+adjoint(function(T)
+	return terra(v: &DualNumBase, a: T)
+		var c = cmath.cosh(val(a))
+		setadj(a, adj(a) + v.adj / (c*c))
 	end
 end))
 
