@@ -25,12 +25,12 @@ terralib.linklibrary(sourcefile:gsub("ad.t", "memoryPool.so"))
 local memPool = memoryPoolLib.newPool()
 
 -- Global stack of variables active for the current computation
-local VoidPtr = &uint8
-local AdjointFn = {&uint8} -> {}
-local numStack = terralib.new(Vector(VoidPtr))
-Vector(VoidPtr).methods.__construct(numStack)
-local fnStack = terralib.new(Vector(AdjointFn))
-Vector(AdjointFn).methods.__construct(fnStack)
+local VoidPtr = &opaque
+local AdjointFn = {VoidPtr} -> {}
+local numStack = global(Vector(VoidPtr))
+Vector(VoidPtr).methods.__construct(numStack:get())
+local fnStack = global(Vector(AdjointFn))
+Vector(AdjointFn).methods.__construct(fnStack:get())
 
 -- =============== DUAL NUMBER TYPE GENERATION ===============
 
@@ -112,53 +112,38 @@ end
 
 local cmath = terralib.includec("math.h")
 
-local function symbols(types)
-	local ret = {}
-	for i,t in ipairs(types) do
-		table.insert(ret, symbol(t))
-	end
-	return ret
-end
+local function makeADFunction(argTypes, usedArgIndices, fwdFn, adjFn)
 
--- This wraps the function created by 'makeADFunction' in a function
--- that expects 'num' in its argument types, instead of &DualNumType
-local function wrapADFunction(fn)
-	local paramtypes = fn:getdefinitions()[1]:gettype().parameters
-	local wrapparams = {}
-	local argexps = {}
-	for i,t in ipairs(paramtypes) do
+	local params = {}
+	local paramsimpl = {}
+	local paramvals = {}
+	for i,t in ipairs(argTypes) do
 		if t == &DualNumBase then
 			t = num
 		end
 		local sym = symbol(t)
-		table.insert(wrapparams, sym)
+		table.insert(params, sym)
 		if t == num then
-			table.insert(argexps, `sym.impl)
+			table.insert(paramsimpl, `sym.impl)
+			table.insert(paramvals, `sym.impl.val)
 		else
-			table.insert(argexps, sym)
+			table.insert(paramsimpl, sym)
+			table.insert(paramvals, sym)
 		end
 	end
-	return terra([wrapparams])
-		return fn([argexps])
-	end
-end
 
--- This expects to see &DualNumBase in the argTypes
-local function makeADFunction(argTypes, usedArgIndices, fwdFn, adjFn)
 	local templateTypes = util.index(argTypes, usedArgIndices)
+	local adjUsedParams = util.index(paramsimpl, usedArgIndices)
 	local DN = DualNum(unpack(templateTypes))
-	local params = symbols(argTypes)
-	local adjUsedParams = util.index(params, usedArgIndices)
-	local paramVals = {}
-	for i,prm in ipairs(params) do
-		if prm.type == double then
-			table.insert(paramVals, prm)
-		else
-			table.insert(paramVals, `prm.val)
+
+	if adjFn then
+		return terra([params])
+			return num { [&DualNumBase](DN.new(fwdFn([paramvals]), adjFn, [adjUsedParams])) }
 		end
-	end
-	return terra([params])
-		return num { [&DualNumBase](DN.new(fwdFn([paramVals]), adjFn, [adjUsedParams])) }
+	else
+		return terra([params])
+			return fwdFn([paramvals])
+		end
 	end
 end
 
@@ -176,7 +161,7 @@ local function makeOverloadedADFunction(numArgs, fwdFn, adjFnTemplate)
 			end
 		end
 		local adjFn, usedargindices = adjFnTemplate(unpack(types))
-		local fn = wrapADFunction(makeADFunction(types, usedargindices, fwdFn, adjFn))
+		local fn = makeADFunction(types, usedargindices, fwdFn, adjFn)
 		if not overallfn then
 			overallfn = fn
 		else
@@ -256,7 +241,7 @@ local function adjoint(fntemp)
 					table.insert(usedtypes, arg.type)
 				end
 			end
-		end
+		end	
 		local DN = DualNum(unpack(usedtypes))
 
 		-- Construct the list of arguments that will be passed to the adjoint function
@@ -295,14 +280,26 @@ end
 
 local admath = util.copytable(cmath)
 
-local function addADFunction(name, numArgs, fwdFn, adjFnTemplate)
+local function addADFunction_simple(name, fn)
 	local primalfn = admath[name]
 	if not primalfn then
 		error(string.format("ad.t: Cannot add overloaded dual function '%s' for which there is no primal function in cmath", name))
 	end
-	local dualfn = makeOverloadedADFunction(numArgs, fwdFn, adjFnTemplate)
-	for i,def in ipairs(dualfn:getdefinitions()) do
+	for i,def in ipairs(fn:getdefinitions()) do
 		primalfn:adddefinition(def)
+	end
+end
+
+local function addADFunction_overloaded(name, numArgs, fwdFn, adjFnTemplate)
+	local dualfn = makeOverloadedADFunction(numArgs, fwdFn, adjFnTemplate)
+	addADFunction_simple(dualfn)
+end
+
+local function addADFunction(...)
+	if select("#",...) == 2 then
+		addADFunction_simple(...)
+	else
+		addADFunction_overloaded(...)
 	end
 end
 
@@ -312,15 +309,276 @@ local function addADOperator(metamethodname, numArgs, fwdFn, adjFnTemplate)
 end
 
 
+---- Operators ----
+
 -- ADD
 addADOperator("__add", 2,
-terra(n1: double, n2: double)
-	return n1 + n2
+terra(a: double, b: double)
+	return a + b
 end,
 adjoint(function(T1, T2)
-	return terra(v: &DualNumBase, n1: T1, n2: T2)
-		setadj(n1, adj(n1) + v.adj)
-		setadj(n2, adj(n2) + v.adj)
+	return terra(v: &DualNumBase, a: T1, b: T2)
+		setadj(a, adj(a) + v.adj)
+		setadj(b, adj(b) + v.adj)
+	end
+end))
+
+-- SUB
+addADOperator("__sub", 2,
+terra(a: double, b: double)
+	return a - b
+end,
+adjoint(function(T1, T2)
+	return terra(v: &DualNumBase, a: T1, b: T2)
+		setadj(a, adj(a) + v.adj)
+		setadj(b, adj(b) - v.adj)
+	end
+end))
+
+-- MUL
+addADOperator("__mul", 2,
+terra(a: double, b: double)
+	return a * b
+end,
+adjoint(function(T1, T2)
+	return terra(v: &DualNumBase, a: T1, b: T2)
+		setadj(a, adj(a) + val(b)*v.adj)
+		setadj(b, adj(b) + val(a)*v.adj)
+	end
+end))
+
+-- DIV
+addADOperator("__div", 2,
+terra(a: double, b: double)
+	return a / b
+end,
+adjoint(function(T1, T2)
+	return terra(v: &DualNumBase, a: T1, b: T2)
+		setadj(a, adj(a) + v.adj/val(b))
+		setadj(b, adj(b) - v.adj*val(a)/(val(b)*val(b)))
+	end
+end))
+
+-- UNM
+addADOperator("__unm", 1,
+terra(a: double)
+	return -a
+end,
+adjoint(function(T)
+	return terra(v: &DualNumBase, a: T)
+		setadj(a, adj(a) - v.adj)
+	end
+end))
+
+-- EQ
+addADOperator("__eq", 2
+terra(a: double, b: double)
+	return a == b
+end)
+
+-- LT
+addADOperator("__lt", 2
+terra(a: double, b: double)
+	return a < b
+end)
+
+-- LE
+addADOperator("__le", 2
+terra(a: double, b: double)
+	return a <= b
+end)
+
+-- GT
+addADOperator("__gt", 2
+terra(a: double, b: double)
+	return a > b
+end)
+
+-- GE
+addADOperator("__lt", 2
+terra(a: double, b: double)
+	return a >= b
+end)
+
+
+---- Functions ----
+
+-- ABS
+addADFunction("abs",
+terra(a: num)
+	if a:val() >= 0.0 then
+		return a
+	else
+		return -a
+	end
+end)
+
+-- ACOS
+addADFunction("acos", 1,
+terra(a: double)
+	return cmath.acos(a)
+end,
+adjoint(function(T)
+	return terra(v: &DualNumBase, a: T)
+		setadj(a, adj(a) - v.adj / cmath.sqrt(1.0 - (val(a)*val(a))))
+	end
+end))
+
+-- ACOSH
+addADFunction("acosh", 1,
+terra(a: double)
+	return cmath.acosh(a)
+end,
+adjoint(function(T)
+	return terra(v: &DualNumBase, a: T)
+		setadj(a, adj(a) + v.adj / cmath.sqrt((val(a)*val(a)) - 1.0))
+	end
+end))
+
+-- ASIN
+addADFunction("asin", 1,
+terra(a: double)
+	return cmath.asin(a)
+end,
+adjoint(function(T)
+	return terra(v: &DualNumBase, a: T)
+		setadj(a, adj(a) + v.adj / cmath.sqrt(1.0 - (val(a)*val(a))))
+	end
+end))
+
+-- ASINH
+addADFunction("asinh", 1,
+terra(a: double)
+	return cmath.asinh(a)
+end,
+adjoint(function(T)
+	return terra(v: &DualNumBase, a: T)
+		setadj(a, adj(a) + v.adj / cmath.sqrt((val(a)*val(a)) + 1.0))
+	end
+end))
+
+-- ATAN
+addADFunction("atan", 1,
+terra(a: double)
+	return cmath.atan(a)
+end,
+adjoint(function(T)
+	return terra(v: &DualNumBase, a: T)
+		setadj(a, adj(a) + v.adj / (1.0 + (val(a)*val(a))))
+	end
+end))
+
+-- ATAN2
+addADFunction("atan2", 2,
+terra(a: double, b: double)
+	return cmath.atan2(a, b)
+end,
+adjoint(function(T1, T2)
+	return terra(v: &DualNumBase, a: T1, b: T2)
+		var sqnorm = (val(a)*val(a)) + (val(b)*val(b))
+		setadj(a, adj(a) + v.adj * val(b)/sqnorm)
+		setadj(b, adj(b) - v.adj * val(a)/sqnorm)
+	end
+end))
+
+-- CEIL
+addADFunction("ceil",
+terra(a: num)
+	return num(cmath.ceil(a:val()))
+end)
+
+-- COS
+addADFunction("cos", 1,
+terra(a: double)
+	return cmath.cos(a)
+end,
+adjoint(function(T)
+	return terra(v: &DualNumBase, a: T)
+		setadj(a, adj(a) - v.adj*cmath.sin(val(a)))
+	end
+end))
+
+-- COSH
+addADFunction("cosh", 1,
+terra(a: double)
+	return cmath.cosh(a)
+end,
+adjoint(function(T)
+	return terra(v: &DualNumBase, a: T)
+		setadj(a, adj(a) + v.adj*cmath.sinh(val(a)))
+	end
+end))
+
+-- EXP
+addADFunction("exp", 1,
+terra(a: double)
+	return cmath.exp(a)
+end,
+adjoint(function(T)
+	return terra(v: &DualNumBase, a: T)
+		setadj(a, adj(a) + v.adj*v.val)
+	end
+end))
+
+-- FABS
+addADFunction("fabs",
+terra(a: num)
+	if a:val() >= 0.0 then
+		return a
+	else
+		return -a
+	end
+end)
+
+-- FLOOR
+addADFunction("floor",
+terra(a: num)
+	return num(cmath.floor(a:val()))
+end)
+
+-- FMAX
+local terra fmax(a: num, b: double)
+	if a:val() >= b then return a else return num(b) end
+end
+local terra fmax(a: double, b: num)
+	if a > b:val() then return num(a) else return b end
+end
+local terra fmax(a: num, b: num)
+	if a:val() > b:val() then return a else return b end
+end
+addADFunction("fmax", fmax)
+
+-- FMIN
+local terra fmin(a: num, b: double)
+	if a:val() <= b then return a else return num(b) end
+end
+local terra fmin(a: double, b: num)
+	if a < b:val() then return num(a) else return b end
+end
+local terra fmin(a: num, b: num)
+	if a:val() < b:val() then return a else return b end
+end
+addADFunction("fmin", fmin)
+
+-- LOG
+addADFunction("log", 1,
+terra(a: double)
+	return cmath.log(a)
+end,
+adjoint(function(T)
+	return terra(v: &DualNumBase, a: T)
+		setadj(a, adj(a) + v.adj / val(a))
+	end
+end))
+
+-- LOG10
+addADFunction("log10", 1,
+terra(a: double)
+	return cmath.log10(a)
+end,
+adjoint(function(T)
+	return terra(v: &DualNumBase, a: T)
+		setadj(a, adj(a) + v.adj / ([math.log(10.0)]*val(a)))
 	end
 end))
 
