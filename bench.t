@@ -18,6 +18,9 @@ local TestFn = {} -> {}
 
 -- Benchmarks for automatic differentiation
 
+local cppbench = terralib.includec("bench.h")
+terralib.linklibrary("libbench.so")
+
 local terra doTest_inner(name: str, fn: TestFn)
 	C.printf("TEST: %s - ", name)
 	var t0 = C.CurrentTimeInSeconds()
@@ -49,5 +52,14 @@ local function makeForwardSpeedTest(T)
 	end
 end
 
-doTest("Foward Speed Test (double)", makeForwardSpeedTest(double))
-doTest("Foward Speed Test (ad.num)", makeForwardSpeedTest(ad.num))
+doTest("Foward Speed Test (Terra, Normal)", makeForwardSpeedTest(double))
+doTest("Foward Speed Test (Terra, AD)", makeForwardSpeedTest(ad.num))
+
+local function makeCPPForwardSpeedTest(cppfn)
+	return terra()
+		cppfn(forward_numOuterIterations, forward_numInnerIterations)
+	end
+end
+
+doTest("Foward Speed Test (C++, Normal)", makeCPPForwardSpeedTest(cppbench.forwardSpeedTest_Normal))
+doTest("Foward Speed Test (C++, AD)", makeCPPForwardSpeedTest(cppbench.forwardSpeedTest_AD))
