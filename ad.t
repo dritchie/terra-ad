@@ -1,6 +1,7 @@
 local templatize = terralib.require("templatize")
 local Vector = terralib.require("vector")
 local util = terralib.require("util")
+local MemoryPool = terralib.require("memoryPool")
 
 local sourcefile = debug.getinfo(1, "S").source:gsub("@", "")
 
@@ -22,7 +23,9 @@ terralib.linklibrary(sourcefile:gsub("ad.t", "memoryPool.so"))
 -- TODO: Make this stuff thread-safe?
 
 -- Global memory pool
-local memPool = memoryPoolLib.newPool()
+--local memPool = memoryPoolLib.newPool()
+local memPool = global(MemoryPool)
+MemoryPool.methods.__construct(memPool:get())
 
 -- Global stack of variables active for the current computation
 local VoidPtr = &opaque
@@ -67,7 +70,8 @@ local DualNum = templatize(function (...)
 			table.insert(args, (select(i, ...)))
 		end
 		return quote
-			var dnptr = [&DualNumT](memoryPoolLib.alloc(memPool, sizeof(DualNumT)))
+			--var dnptr = [&DualNumT](memoryPoolLib.alloc(memPool, sizeof(DualNumT)))
+			var dnptr = [&DualNumT](memPool:alloc(sizeof(DualNumT)))
 			dnptr.val = val
 			dnptr.adj = 0.0
 			[makeFieldExpList(dnptr, numExtraFields)] = [args]
@@ -662,7 +666,8 @@ end))
 local terra recoverMemory()
 	numStack:clear()
 	fnStack:clear()
-	memoryPoolLib.recoverAll(memPool)
+	--memoryPoolLib.recoverAll(memPool)
+	memPool:recoverAll()
 end
 
 -- Compute the gradient of the given variable w.r.t all other variables
