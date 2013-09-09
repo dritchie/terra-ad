@@ -132,18 +132,23 @@ local function makeADFunction(argTypes, fwdFn, adjFn, usedArgIndices)
 		end
 	end
 
+	local retfn = nil
 	if adjFn then
 		local templateTypes = util.index(argTypes, usedArgIndices)
 		local adjUsedParams = util.index(paramsimpl, usedArgIndices)
 		local DN = DualNum(unpack(templateTypes))
-		return terra([params]) : num
+		retfn = terra([params]) : num
 			return num { [&DualNumBase](DN.new(fwdFn([paramvals]), adjFn, [adjUsedParams])) }
 		end
 	else
-		return terra([params])
+		retfn = terra([params])
 			return fwdFn([paramvals])
 		end
 	end
+	-- These functions are supposed to be (ideally) no slower than their cmath
+	-- equivalents, so we always inline them.
+	retfn:getdefinitions()[1]:setinlined(true)
+	return retfn
 end
 
 local function makeOverloadedADFunction(numArgs, fwdFn, adjFnTemplate)
@@ -694,7 +699,8 @@ end
 return
 {
 	num = num,
-	math = admath
+	math = admath,
+	recoverMemory = recoverMemory
 }
 
 
