@@ -8,7 +8,7 @@ local m = terralib.require("mem")
 
 local num = ad.num
 local str = &int8
-local Array = util.Array
+local Array = Vector.fromItems
 
 local numtests = global(int, 0)
 local numtestspassed = global(int, 0)
