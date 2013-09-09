@@ -3,27 +3,12 @@ local Vector = terralib.require("vector")
 local util = terralib.require("util")
 local MemoryPool = terralib.require("memoryPool")
 
-local sourcefile = debug.getinfo(1, "S").source:gsub("@", "")
-
-
--- =============== MEMORY POOL ===============
-
-local dir = sourcefile:gsub("ad.t", "")
-
--- Make sure the memory pool library exists and is up-to-date
-io.popen(string.format("cd %s; make -f memoryPool.makefile", dir)):read("*all")
-
--- Load the header/library
-local memoryPoolLib = terralib.includec(sourcefile:gsub("ad.t", "memoryPool.h"))
-terralib.linklibrary(sourcefile:gsub("ad.t", "memoryPool.so"))
-
 
 -- =============== GLOBALS ===============
 
 -- TODO: Make this stuff thread-safe?
 
 -- Global memory pool
---local memPool = memoryPoolLib.newPool()
 local memPool = global(MemoryPool)
 MemoryPool.methods.__construct(memPool:get())
 
@@ -70,7 +55,6 @@ local DualNum = templatize(function (...)
 			table.insert(args, (select(i, ...)))
 		end
 		return quote
-			--var dnptr = [&DualNumT](memoryPoolLib.alloc(memPool, sizeof(DualNumT)))
 			var dnptr = [&DualNumT](memPool:alloc(sizeof(DualNumT)))
 			dnptr.val = val
 			dnptr.adj = 0.0
@@ -666,7 +650,6 @@ end))
 local terra recoverMemory()
 	numStack:clear()
 	fnStack:clear()
-	--memoryPoolLib.recoverAll(memPool)
 	memPool:recoverAll()
 end
 
