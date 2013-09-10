@@ -10,15 +10,20 @@ local MemoryPool = terralib.require("memoryPool")
 
 -- Global memory pool
 local memPool = global(MemoryPool)
-MemoryPool.methods.__construct(memPool:get())
 
 -- Global stack of variables active for the current computation
 local VoidPtr = &opaque
 local AdjointFn = {VoidPtr} -> {}
 local numStack = global(Vector(VoidPtr))
-Vector(VoidPtr).methods.__construct(numStack:get())
 local fnStack = global(Vector(AdjointFn))
-Vector(AdjointFn).methods.__construct(fnStack:get())
+
+local terra initGlobals()
+	memPool:__construct()
+	numStack:__construct()
+	fnStack:__construct()
+end
+
+initGlobals()
 
 -- =============== DUAL NUMBER TYPE GENERATION ===============
 
@@ -221,6 +226,7 @@ end)
 local function adjoint(fntemp)
 	return function(...)
 		local specializedfn = fntemp(...)
+		util.inline(specializedfn)
 		usedargtable = {}
 		specializedfn:compile()
 
@@ -400,9 +406,7 @@ end)
 
 -- ACOS
 addADFunction("acos", 1,
-terra(a: double)
-	return cmath.acos(a)
-end,
+cmath.acos,
 adjoint(function(T)
 	return terra(v: &DualNumBase, a: T)
 		setadj(a, adj(a) - v.adj / cmath.sqrt(1.0 - (val(a)*val(a))))
@@ -411,9 +415,7 @@ end))
 
 -- ACOSH
 addADFunction("acosh", 1,
-terra(a: double)
-	return cmath.acosh(a)
-end,
+cmath.acosh,
 adjoint(function(T)
 	return terra(v: &DualNumBase, a: T)
 		setadj(a, adj(a) + v.adj / cmath.sqrt((val(a)*val(a)) - 1.0))
@@ -422,9 +424,7 @@ end))
 
 -- ASIN
 addADFunction("asin", 1,
-terra(a: double)
-	return cmath.asin(a)
-end,
+cmath.asin,
 adjoint(function(T)
 	return terra(v: &DualNumBase, a: T)
 		setadj(a, adj(a) + v.adj / cmath.sqrt(1.0 - (val(a)*val(a))))
@@ -433,9 +433,7 @@ end))
 
 -- ASINH
 addADFunction("asinh", 1,
-terra(a: double)
-	return cmath.asinh(a)
-end,
+cmath.asinh,
 adjoint(function(T)
 	return terra(v: &DualNumBase, a: T)
 		setadj(a, adj(a) + v.adj / cmath.sqrt((val(a)*val(a)) + 1.0))
@@ -444,9 +442,7 @@ end))
 
 -- ATAN
 addADFunction("atan", 1,
-terra(a: double)
-	return cmath.atan(a)
-end,
+cmath.atan,
 adjoint(function(T)
 	return terra(v: &DualNumBase, a: T)
 		setadj(a, adj(a) + v.adj / (1.0 + (val(a)*val(a))))
@@ -455,9 +451,7 @@ end))
 
 -- ATAN2
 addADFunction("atan2", 2,
-terra(a: double, b: double)
-	return cmath.atan2(a, b)
-end,
+cmath.atan2,
 adjoint(function(T1, T2)
 	return terra(v: &DualNumBase, a: T1, b: T2)
 		var sqnorm = (val(a)*val(a)) + (val(b)*val(b))
@@ -474,9 +468,7 @@ end)
 
 -- COS
 addADFunction("cos", 1,
-terra(a: double)
-	return cmath.cos(a)
-end,
+cmath.cos,
 adjoint(function(T)
 	return terra(v: &DualNumBase, a: T)
 		setadj(a, adj(a) - v.adj*cmath.sin(val(a)))
@@ -485,9 +477,7 @@ end))
 
 -- COSH
 addADFunction("cosh", 1,
-terra(a: double)
-	return cmath.cosh(a)
-end,
+cmath.cosh,
 adjoint(function(T)
 	return terra(v: &DualNumBase, a: T)
 		setadj(a, adj(a) + v.adj*cmath.sinh(val(a)))
@@ -496,9 +486,7 @@ end))
 
 -- EXP
 addADFunction("exp", 1,
-terra(a: double)
-	return cmath.exp(a)
-end,
+cmath.exp,
 adjoint(function(T)
 	return terra(v: &DualNumBase, a: T)
 		setadj(a, adj(a) + v.adj*v.val)
@@ -547,9 +535,7 @@ addADFunction("fmin", fmin)
 
 -- LOG
 addADFunction("log", 1,
-terra(a: double)
-	return cmath.log(a)
-end,
+cmath.log,
 adjoint(function(T)
 	return terra(v: &DualNumBase, a: T)
 		setadj(a, adj(a) + v.adj / val(a))
@@ -558,9 +544,7 @@ end))
 
 -- LOG10
 addADFunction("log10", 1,
-terra(a: double)
-	return cmath.log10(a)
-end,
+cmath.log10,
 adjoint(function(T)
 	return terra(v: &DualNumBase, a: T)
 		setadj(a, adj(a) + v.adj / ([math.log(10.0)]*val(a)))
@@ -569,9 +553,7 @@ end))
 
 -- POW
 addADFunction("pow", 2,
-terra(a: double, b: double) : double
-	return cmath.pow(a, b)
-end,
+cmath.pow,
 adjoint(function(T1, T2)
 	return terra(v: &DualNumBase, a: T1, b: T2)
 		if val(a) ~= 0.0 then	-- Avoid log(0)
@@ -589,9 +571,7 @@ end)
 
 -- SIN
 addADFunction("sin", 1,
-terra(a: double)
-	return cmath.sin(a)
-end,
+cmath.sin,
 adjoint(function(T)
 	return terra(v: &DualNumBase, a: T)
 		setadj(a, adj(a) + v.adj*cmath.cos(val(a)))
@@ -600,9 +580,7 @@ end))
 
 -- SINH
 addADFunction("sinh", 1,
-terra(a: double)
-	return cmath.sinh(a)
-end,
+cmath.sinh,
 adjoint(function(T)
 	return terra(v: &DualNumBase, a: T)
 		setadj(a, adj(a) + v.adj*cmath.cosh(val(a)))
@@ -611,9 +589,7 @@ end))
 
 -- SQRT
 addADFunction("sqrt", 1,
-terra(a: double)
-	return cmath.sqrt(a)
-end,
+cmath.sqrt,
 adjoint(function(T)
 	return terra(v: &DualNumBase, a: T)
 		setadj(a, adj(a) + v.adj / (2.0 * v.val))
@@ -622,9 +598,7 @@ end))
 
 -- TAN
 addADFunction("tan", 1,
-terra(a: double)
-	return cmath.tan(a)
-end,
+cmath.tan,
 adjoint(function(T)
 	return terra(v: &DualNumBase, a: T)
 		setadj(a, adj(a) + v.adj*(1.0 + v.val*v.val))
@@ -633,9 +607,7 @@ end))
 
 -- TANH
 addADFunction("tanh", 1,
-terra(a: double)
-	return cmath.tanh(a)
-end,
+cmath.tanh,
 adjoint(function(T)
 	return terra(v: &DualNumBase, a: T)
 		var c = cmath.cosh(val(a))
@@ -688,7 +660,8 @@ return
 {
 	num = num,
 	math = admath,
-	recoverMemory = recoverMemory
+	recoverMemory = recoverMemory,
+	initGlobals = initGlobals
 }
 
 
