@@ -396,7 +396,7 @@ terra(a: double, b: double)
 end)
 
 -- GE
-addADOperator("__lt", 2,
+addADOperator("__ge", 2,
 terra(a: double, b: double)
 	return a >= b
 end)
