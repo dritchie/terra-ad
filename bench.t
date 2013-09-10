@@ -1,5 +1,6 @@
 
 local ad = terralib.require("ad")
+local util = terralib.require("util")
 
 C = terralib.includecstring [[
 	#include <stdio.h>
@@ -18,6 +19,7 @@ local TestFn = {} -> {}
 
 -- Benchmarks for automatic differentiation
 
+util.wait("make -f bench.makefile")
 local cppbench = terralib.includec("bench.h")
 terralib.linklibrary("libbench.so")
 
@@ -46,14 +48,15 @@ local function makeForwardSpeedTest(T)
 				res = res / 2.0
 				res = ad.math.exp(res)
 				res = ad.math.log(res)
+				res = res * res
+				res = ad.math.sqrt(res)
+				res = ad.math.cos(res)
+				res = ad.math.acos(res)
 			end
 			ad.recoverMemory()
 		end
 	end
 end
-
-doTest("Foward Speed Test (Terra, Normal)", makeForwardSpeedTest(double))
-doTest("Foward Speed Test (Terra, AD)", makeForwardSpeedTest(ad.num))
 
 local function makeCPPForwardSpeedTest(cppfn)
 	return terra()
@@ -61,5 +64,7 @@ local function makeCPPForwardSpeedTest(cppfn)
 	end
 end
 
+doTest("Foward Speed Test (Terra, Normal)", makeForwardSpeedTest(double))
+doTest("Foward Speed Test (Terra, AD)", makeForwardSpeedTest(ad.num))
 doTest("Foward Speed Test (C++, Normal)", makeCPPForwardSpeedTest(cppbench.forwardSpeedTest_Normal))
 doTest("Foward Speed Test (C++, AD)", makeCPPForwardSpeedTest(cppbench.forwardSpeedTest_AD))

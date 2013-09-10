@@ -20,7 +20,6 @@ clean:
 
 $(SO): $(OBJ)
 	$(CC) -shared $(OBJ) -o $@
-	rm -f *.o
 
 %.o: %.cpp $(HEADERS)
 	$(CC) -c -O3 $(CFLAGS) $*.cpp -o $@

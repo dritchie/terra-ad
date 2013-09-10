@@ -7,7 +7,7 @@ void forwardSpeedTest(int outeriters, int inneriters)
 {
 	for (int i = 0; i < outeriters; i++)
 	{
-		T res = 0.0;
+		T res = 1.0;
 		for (int j = 0; j < inneriters; j++)
 		{
 			res += 5.0;
@@ -16,6 +16,10 @@ void forwardSpeedTest(int outeriters, int inneriters)
 			res /= 2.0;
 			res = exp(res);
 			res = log(res);
+			res *= res;
+			res = sqrt(res);
+			res = cos(res);
+			res = acos(res);
 		}
 		stan::agrad::recover_memory();
 	}
