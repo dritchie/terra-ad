@@ -67,10 +67,10 @@ local function makeCPPForwardSpeedTest(cppfn)
 	end
 end
 
-doTest("Foward Speed Test (Terra, Normal)", makeForwardSpeedTest(double))
-doTest("Foward Speed Test (Terra, AD)", makeForwardSpeedTest(ad.num))
-doTest("Foward Speed Test (C++, Normal)", makeCPPForwardSpeedTest(cppbench.forwardSpeedTest_Normal))
-doTest("Foward Speed Test (C++, AD)", makeCPPForwardSpeedTest(cppbench.forwardSpeedTest_AD))
+doTest("Forward Speed Test (Terra, Normal)", makeForwardSpeedTest(double))
+doTest("Forward Speed Test (Terra, AD)", makeForwardSpeedTest(ad.num))
+doTest("Forward Speed Test (C++, Normal)", makeCPPForwardSpeedTest(cppbench.forwardSpeedTest_Normal))
+doTest("Forward Speed Test (C++, AD)", makeCPPForwardSpeedTest(cppbench.forwardSpeedTest_AD))
 
 --------------------------------------------------------------
 print("-------------------------")
@@ -102,8 +102,8 @@ local function makeCPPForwardAndBackwardSpeedTest(cppfn)
 	end
 end
 
-doTest("Foward/Backward Speed Test (Terra)", forwardAndBackwardSpeedTest)
-doTest("Foward/Backward Speed Test (C++)", makeCPPForwardAndBackwardSpeedTest(cppbench.forwardAndBackwardSpeedTest))
+doTest("Forward/Backward Speed Test (Terra)", forwardAndBackwardSpeedTest)
+doTest("Forward/Backward Speed Test (C++)", makeCPPForwardAndBackwardSpeedTest(cppbench.forwardAndBackwardSpeedTest))
 
 
 
