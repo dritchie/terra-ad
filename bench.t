@@ -35,6 +35,9 @@ local function doTest(name, fn)
 	doTest_inner(name, fn:getdefinitions()[1]:getpointer())
 end
 
+--------------------------------------------------------------
+print("-------------------------")
+
 local forward_numOuterIterations = 10000
 local forward_numInnerIterations = 1000
 local function makeForwardSpeedTest(T)
@@ -68,3 +71,41 @@ doTest("Foward Speed Test (Terra, Normal)", makeForwardSpeedTest(double))
 doTest("Foward Speed Test (Terra, AD)", makeForwardSpeedTest(ad.num))
 doTest("Foward Speed Test (C++, Normal)", makeCPPForwardSpeedTest(cppbench.forwardSpeedTest_Normal))
 doTest("Foward Speed Test (C++, AD)", makeCPPForwardSpeedTest(cppbench.forwardSpeedTest_AD))
+
+--------------------------------------------------------------
+print("-------------------------")
+
+local fb_numOuterIterations = 10000
+local fb_numInnerIterations = 1000
+local terra forwardAndBackwardSpeedTest()
+	for i=0,fb_numOuterIterations do
+		var res = ad.num(1.0)
+		for j=0,fb_numInnerIterations do
+			res = res + 5.0
+			res = res - 5.0
+			res = res * 2.0
+			res = res / 2.0
+			res = ad.math.exp(res)
+			res = ad.math.log(res)
+			res = res * res
+			res = ad.math.sqrt(res)
+			res = ad.math.cos(res)
+			res = ad.math.acos(res)
+		end
+		res:grad()
+	end
+end
+
+local function makeCPPForwardAndBackwardSpeedTest(cppfn)
+	return terra()
+		cppfn(fb_numOuterIterations, fb_numInnerIterations)
+	end
+end
+
+doTest("Foward/Backward Speed Test (Terra)", forwardAndBackwardSpeedTest)
+doTest("Foward/Backward Speed Test (C++)", makeCPPForwardAndBackwardSpeedTest(cppbench.forwardAndBackwardSpeedTest))
+
+
+
+
+

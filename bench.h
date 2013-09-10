@@ -14,6 +14,7 @@ EXTERN
 
 EXPORT void forwardSpeedTest_Normal(int outeriters, int inneriters);
 EXPORT void forwardSpeedTest_AD(int outeriters, int inneriters);
+EXPORT void forwardAndBackwardSpeedTest(int outeriters, int inneriters);
 
 #ifdef __cplusplus
 }
