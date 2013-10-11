@@ -77,8 +77,11 @@ print("-------------------------")
 
 local fb_numOuterIterations = 10000
 local fb_numInnerIterations = 1000
+local fwdtime = global(double, 0.0)
+local revtime = global(double, 0.0)
 local terra forwardAndBackwardSpeedTest()
 	for i=0,fb_numOuterIterations do
+		var t0 = C.CurrentTimeInSeconds()
 		var res = ad.num(1.0)
 		for j=0,fb_numInnerIterations do
 			res = res + 5.0
@@ -92,7 +95,11 @@ local terra forwardAndBackwardSpeedTest()
 			res = ad.math.cos(res)
 			res = ad.math.acos(res)
 		end
+		var t1 = C.CurrentTimeInSeconds()
 		res:grad()
+		var t2 = C.CurrentTimeInSeconds()
+		fwdtime = fwdtime + (t1 - t0)
+		revtime = revtime + (t2 - t1)
 	end
 end
 
@@ -103,6 +110,7 @@ local function makeCPPForwardAndBackwardSpeedTest(cppfn)
 end
 
 doTest("Forward/Backward Speed Test (Terra)", forwardAndBackwardSpeedTest)
+C.printf("(Forward: %g, Backward: %g)\n", fwdtime:get(), revtime:get())
 doTest("Forward/Backward Speed Test (C++)", makeCPPForwardAndBackwardSpeedTest(cppbench.forwardAndBackwardSpeedTest))
 
 
