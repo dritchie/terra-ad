@@ -14,13 +14,16 @@ local memPool = global(MemoryPool)
 -- Global stack of variables active for the current computation
 local VoidPtr = &opaque
 local AdjointFn = {VoidPtr} -> {}
-local numStack = global(Vector(VoidPtr))
-local fnStack = global(Vector(AdjointFn))
+local struct TapeEntry
+{
+	datum: VoidPtr,
+	fn: AdjointFn
+}
+local tape = global(Vector(TapeEntry))
 
 local terra initGlobals()
 	memPool:__construct()
-	numStack:__construct()
-	fnStack:__construct()
+	tape:__construct()
 end
 
 initGlobals()
@@ -64,8 +67,10 @@ local DualNum = templatize(function (...)
 			dnptr.val = val
 			dnptr.adj = 0.0
 			[makeFieldExpList(dnptr, numExtraFields)] = [args]
-			numStack:push([VoidPtr](dnptr))
-			fnStack:push(adjFn)
+			var tapeEntry : TapeEntry
+			tapeEntry.datum = dnptr
+			tapeEntry.fn = adjFn
+			tape:push(tapeEntry)
 		in
 			dnptr
 		end
@@ -620,17 +625,17 @@ end))
 
 -- Recover (but do not free) all memory associated with gradient computation
 local terra recoverMemory()
-	numStack:clear()
-	fnStack:clear()
+	tape:clear()
 	memPool:recoverAll()
 end
 
 -- Compute the gradient of the given variable w.r.t all other variables
 local terra grad(n: num)
 	n.impl.adj = 1.0
-	for i=0,numStack.size do
-		var j = numStack.size-i-1
-		fnStack:get(j)(numStack:get(j))
+	for i=0,tape.size do
+		var j = tape.size-i-1
+		var tapeEntry = tape:getPointer(j)
+		tapeEntry.fn(tapeEntry.datum)
 	end
 end
 
