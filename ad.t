@@ -623,6 +623,16 @@ end))
 
 -- =============== DERIVATIVE COMPUTATION ===============
 
+-- Returns the amount of memory currently being used by the tape
+local terra currTapeMemUsed()
+	return memPool:currAmountAllocated()
+end
+
+-- Returns the maximum amount of memory ever used by the tape
+local terra maxTapeMemUsed()
+	return memPool:maxAmountAllocated()
+end
+
 -- Recover (but do not free) all memory associated with gradient computation
 local terra recoverMemory()
 	tape:clear()
@@ -665,6 +675,8 @@ return
 {
 	num = num,
 	math = admath,
+	currTapeMemUsed = currTapeMemUsed,
+	maxTapeMemUsed = maxTapeMemUsed,
 	recoverMemory = recoverMemory,
 	initGlobals = initGlobals
 }

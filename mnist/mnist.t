@@ -174,6 +174,7 @@ local terra doTraining()
 	m.destruct(lrm)
 	m.destruct(data)
 	C.printf("Time taken: %g\n", t1 - t0)
+	C.printf("Max tape mem used: %u\n", ad.maxTapeMemUsed())
 end
 doTraining()
 

@@ -36,7 +36,11 @@ local struct MemoryPool
 	sizes_ : Vector(uint),
 	cur_block_ : uint,
 	cur_block_end_ : &int8,
-	next_loc_ : &int8
+	next_loc_ : &int8,
+
+	-- Analytics
+	currAlloced: uint,
+	maxAlloced: uint,
 }
 
 terra MemoryPool:__construct() : {}
@@ -51,6 +55,9 @@ terra MemoryPool:__construct() : {}
 		C.printf("memoryPool.t: bad alloc")
 		C.exit(1)
 	end
+
+	self.currAlloced = 0U
+	self.maxAlloced = 0U
 end
 
 terra MemoryPool:__destruct()
@@ -100,6 +107,7 @@ terra MemoryPool:alloc(len: uint)
 	if self.next_loc_ >= self.cur_block_end_ then
 		result = self:__move_to_next_block(len)
 	end
+	self.currAlloced = self.currAlloced + len
 	return result
 end
 util.inline(MemoryPool.methods.alloc)
@@ -108,6 +116,11 @@ terra MemoryPool:recoverAll()
 	self.cur_block_ = 0
 	self.next_loc_ = self.blocks_:get(0)
 	self.cur_block_end_ = self.next_loc_ + self.sizes_:get(0)
+
+	if self.currAlloced > self.maxAlloced then
+		self.maxAlloced = self.currAlloced
+	end
+	self.currAlloced = 0
 end
 util.inline(MemoryPool.methods.recoverAll)
 
@@ -122,6 +135,16 @@ terra MemoryPool:freeAll()
 	self.blocks_:resize(1)
 	self:recoverAll()
 end
+
+terra MemoryPool:currAmountAllocated()
+	return self.currAlloced
+end
+util.inline(MemoryPool.methods.currAmountAllocated)
+
+terra MemoryPool:maxAmountAllocated()
+	return self.maxAlloced
+end
+util.inline(MemoryPool.methods.maxAmountAllocated)
 
 
 return MemoryPool
