@@ -19,4 +19,5 @@ $(EXE): $(OBJ)
 	$(CC) $(OBJ) -o $@
 
 %.o: %.cpp $(HEADERS)
-	$(CC) -c -O3 $(CFLAGS) $*.cpp -o $@
+	#$(CC) -c -O3 $(CFLAGS) $*.cpp -o $@
+	$(CC) -c -g -O3 $(CFLAGS) $*.cpp -o $@

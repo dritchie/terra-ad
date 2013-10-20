@@ -35,7 +35,7 @@ initGlobals()
 local function makeFieldExpList(obj, numFields)
 	local fields = {}
 	for i=1,numFields do
-		table.insert(fields, `obj.[string.format("_%d", i-1)])
+		table.insert(fields, `obj.[string.format("_%d", i-1+2)])
 	end
 	return fields
 end
@@ -259,7 +259,7 @@ local function adjoint(fntemp)
 			for i,arg in ipairs(adjfnparams) do
 				if i ~= 1 then
 					if usedargtable[arg.symbol] then
-						table.insert(argstoadjfn, `dnum.[string.format("_%d", currFieldIndex)])
+						table.insert(argstoadjfn, `dnum.[string.format("_%d", currFieldIndex+2)])
 						currFieldIndex = currFieldIndex + 1
 					else
 						table.insert(argstoadjfn, `[arg.type](0))

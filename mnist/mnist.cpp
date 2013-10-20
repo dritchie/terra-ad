@@ -47,7 +47,7 @@ void loadData(const char* filename, uint numToUse, vector<Datum>& data)
 			while (tok != NULL and *tok != 0)
 			{
 				double num = atof(tok);
-				datum.features.push_back(num);
+				datum.features.push_back(num/255);
 				tok = strtok(NULL, ",\n");
 			}
 			data.push_back(datum);
@@ -107,7 +107,7 @@ public:
 			activations[i] = act;
 			sumActivations += act;
 		}
-		return activations[label] / sumActivations;
+		return log(activations[label] / sumActivations);
 	}
 
 	void train(const vector<Datum>& data, double learnRate, uint iters)
@@ -116,19 +116,20 @@ public:
 		vector<double> grad(params.size(), 0.0);
 		for (uint iter = 0; iter < iters; iter++)
 		{
-			printf(" Gradient descent iteration %u/%u\r", iter+1, iters);
-			flush();
+			var loss = 0.0;
+			for (uint j = 0; j < params.size(); j++)
+					params[j] = var(this->params[j]);
 			for (uint i = 0; i < data.size(); i++)
 			{
-				for (uint j = 0; j < params.size(); j++)
-					params[j] = var(this->params[j]);
 				uint label = data[i].label;
 				const vector<double>& features = data[i].features;
-				var loss = -logprob(label, features, params);
-				loss.grad(params, grad);
-				for (uint j = 0; j < params.size(); j++)
-					this->params[j] += learnRate*grad[j];
+				loss -= logprob(label, features, params);
 			}
+			printf(" Gradient descent iteration %u/%u (loss = %g)     \r", iter+1, iters, loss.val());
+			flush();
+			loss.grad(params, grad);
+			for (uint j = 0; j < params.size(); j++)
+					this->params[j] -= learnRate*grad[j];
 		}
 		printf("\n");
 	}
@@ -137,7 +138,7 @@ public:
 ///////////////////////////
 
 // 'train.csv' from https://www.kaggle.com/c/digit-recognizer/data
-const char* datafile = "train.csv";
+const char* datafile = "/Users/dritchie/Git/terra-ad/mnist/train.csv";
 uint numDatapointsToUse = 6000;
 
 // MNIST data has 10 classes (digits 0-10) and images are 28x28
@@ -145,7 +146,7 @@ uint numClasses = 10;
 uint numFeatures = 28*28;
 
 // Uhhh...some arbitrary constants
-double learnRate = 0.05;
+double learnRate = 0.00005;
 uint iters = 100;
 
 int main()
@@ -156,6 +157,10 @@ int main()
 	LogisticRegressionModel lrm(numClasses, numFeatures);
 	lrm.train(data, learnRate, iters);
 	double t1 = CurrentTimeInSeconds();
+	double paramsum = 0.0;
+	for (uint i = 0; i < lrm.params.size(); i++)
+		paramsum += lrm.params[i];
+	printf("Sum of learned params: %g\n", paramsum);
 	printf("Time taken: %g\n", t1 - t0);
 	// NOTE: This is not a standard stan construct; I added it
 	printf("Max tape mem used: %u\n", maxTapeMemUsed());

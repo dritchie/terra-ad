@@ -57,7 +57,7 @@ local terra loadData(filename: rawstring, numToUse: uint)
 			tok = C.strtok(nil, ",\n")
 			while tok ~= nil and @tok ~= 0 do
 				var num = C.atof(tok)
-				datum.features:push(num)
+				datum.features:push(num/255)
 				tok = C.strtok(nil, ",\n")
 			end
 			data:push(datum)
@@ -120,7 +120,7 @@ terra LogisticRegressionModel:logprob(class: int, features: &Vector(double), par
 	end
 	var ret = activations:get(class) / sumActivations
 	m.destruct(activations)
-	return ret
+	return ad.math.log(ret)
 end
 
 -- Gradient descent
@@ -128,19 +128,20 @@ terra LogisticRegressionModel:train(data: &Vector(Datum), learnRate: double, ite
 	var params = [Vector(num)].stackAlloc(self.params.size, 0.0)
 	var grad = [Vector(double)].stackAlloc(self.params.size, 0.0)
 	for iter=0,iters do
-		C.printf(" Gradient descent iteration %u/%u\r", iter+1, iters)
-		C.flush()
+		var loss = num(0.0)
+		for j=0,self.params.size do
+			params:set(j, num(self.params:get(j)))
+		end
 		for i=0,data.size do
-			for j=0,self.params.size do
-				params:set(j, num(self.params:get(j)))
-			end
-			var class = data:get(i).label
+			var class = data:getPointer(i).label
 			var features = &(data:getPointer(i).features)
-			var loss = -self:logprob(class, features, &params)
-			loss:grad(&params, &grad)
-			for j=0,self.params.size do
-				self.params:set(j, self.params:get(j) + learnRate*grad:get(j))
-			end
+			loss = loss - self:logprob(class, features, &params)
+		end
+		C.printf(" Gradient descent iteration %u/%u (loss = %g)     \r", iter+1, iters, loss:val())
+		C.flush()
+		loss:grad(&params, &grad)
+		for j=0,self.params.size do
+			self.params:set(j, self.params:get(j) - learnRate*grad:get(j))
 		end
 	end
 	C.printf("\n")
@@ -154,7 +155,7 @@ m.addConstructors(LogisticRegressionModel)
 -----------------------------------
 
 -- 'train.csv' from https://www.kaggle.com/c/digit-recognizer/data
-local datafile = "train.csv"
+local datafile = "/Users/dritchie/Git/terra-ad/mnist/train.csv"
 local numDatapointsToUse = 6000
 
 -- MNIST data has 10 classes (digits 0-10) and images are 28x28
@@ -162,7 +163,7 @@ local numClasses = 10
 local numFeatures = 28*28
 
 -- Uhhh...some arbitrary constants
-local learnRate = 0.05
+local learnRate = 0.00005
 local iters = 100
 
 local terra doTraining()
@@ -171,12 +172,26 @@ local terra doTraining()
 	var lrm = LogisticRegressionModel.stackAlloc(numClasses, numFeatures)
 	lrm:train(&data, learnRate, iters)
 	var t1 = C.CurrentTimeInSeconds()
+	var paramsum = 0.0
+	for i=0,lrm.params.size do
+		paramsum = paramsum + lrm.params:get(i)
+	end
 	m.destruct(lrm)
 	m.destruct(data)
+	C.printf("Sum of learned params: %g\n", paramsum)
 	C.printf("Time taken: %g\n", t1 - t0)
 	C.printf("Max tape mem used: %u\n", ad.maxTapeMemUsed())
 end
-doTraining()
+
+--doTraining()
+terralib.saveobj("mnist_terra",
+{
+	main = terra()
+		ad.initGlobals()
+		doTraining()
+	end
+})
+
 
 
 
