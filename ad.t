@@ -101,7 +101,7 @@ num.metamethods.__cast = function(from, to, exp)
 	if from == double and to == num then
 		return `num { DualNumBase.new(exp, nullAdjointFn) }
 	else
-		error(string.format("ad.t: Cannot cast '%s' to 'num'", tostring(from)))
+		error(string.format("ad.t: Cannot cast '%s' to '%s'", tostring(from), tostring(to)))
 	end
 end
 
