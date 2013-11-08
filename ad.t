@@ -321,9 +321,7 @@ end
 
 -- ADD
 addADOperator("__add", 2,
-terra(a: double, b: double)
-	return a + b
-end,
+macro(function(a, b) return `a + b end),
 adjoint(function(T1, T2)
 	return terra(v: &DualNumBase, a: T1, b: T2)
 		setadj(a, adj(a) + v.adj)
@@ -333,9 +331,7 @@ end))
 
 -- SUB
 addADOperator("__sub", 2,
-terra(a: double, b: double)
-	return a - b
-end,
+macro(function(a, b) return `a - b end),
 adjoint(function(T1, T2)
 	return terra(v: &DualNumBase, a: T1, b: T2)
 		setadj(a, adj(a) + v.adj)
@@ -345,9 +341,7 @@ end))
 
 -- MUL
 addADOperator("__mul", 2,
-terra(a: double, b: double)
-	return a * b
-end,
+macro(function(a, b) return `a * b end),
 adjoint(function(T1, T2)
 	return terra(v: &DualNumBase, a: T1, b: T2)
 		setadj(a, adj(a) + val(b)*v.adj)
@@ -357,9 +351,7 @@ end))
 
 -- DIV
 addADOperator("__div", 2,
-terra(a: double, b: double)
-	return a / b
-end,
+macro(function(a, b) return `a / b end),
 adjoint(function(T1, T2)
 	return terra(v: &DualNumBase, a: T1, b: T2)
 		setadj(a, adj(a) + v.adj/val(b))
@@ -369,9 +361,7 @@ end))
 
 -- UNM
 addADOperator("__unm", 1,
-terra(a: double)
-	return -a
-end,
+macro(function(a) return `-a end),
 adjoint(function(T)
 	return terra(v: &DualNumBase, a: T)
 		setadj(a, adj(a) - v.adj)
@@ -380,33 +370,23 @@ end))
 
 -- EQ
 addADOperator("__eq", 2,
-terra(a: double, b: double)
-	return a == b
-end)
+macro(function(a, b) return `a == b end))
 
 -- LT
 addADOperator("__lt", 2,
-terra(a: double, b: double)
-	return a < b
-end)
+macro(function(a, b) return `a < b end))
 
 -- LE
 addADOperator("__le", 2,
-terra(a: double, b: double)
-	return a <= b
-end)
+macro(function(a, b) return `a <= b end))
 
 -- GT
 addADOperator("__gt", 2,
-terra(a: double, b: double)
-	return a > b
-end)
+macro(function(a, b) return `a > b end))
 
 -- GE
 addADOperator("__ge", 2,
-terra(a: double, b: double)
-	return a >= b
-end)
+macro(function(a, b) return `a >= b end))
 
 
 ---- Functions ----
