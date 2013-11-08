@@ -176,6 +176,7 @@ local function makeOverloadedADFunction(numArgs, fwdFn, adjFnTemplate)
 		end
 		bitstring = bitstring + 1
 	end
+	util.inline(overallfn)
 	return overallfn
 end
 
