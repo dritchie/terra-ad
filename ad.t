@@ -671,10 +671,13 @@ end
 
 -- =============== EXPORTS ===============
 
+local val = macro(function(x) if x:gettype() == num then return `x:val() else return x end end)
+
 return
 {
 	num = num,
 	math = admath,
+	val = val,
 	currTapeMemUsed = currTapeMemUsed,
 	maxTapeMemUsed = maxTapeMemUsed,
 	recoverMemory = recoverMemory,
