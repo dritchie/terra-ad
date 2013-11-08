@@ -89,10 +89,12 @@ local struct num
 terra num:val()
 	return self.impl.val
 end
+util.inline(num.methods.val)
 
 terra num:adj()
 	return self.impl.adj
 end
+util.inline(num.methods.adj)
 
 local terra nullAdjointFn(impl: VoidPtr)
 end
@@ -145,7 +147,7 @@ local function makeADFunction(argTypes, fwdFn, adjFn, usedArgIndices)
 	end
 	-- These functions are supposed to be (ideally) no slower than their cmath
 	-- equivalents, so we always inline them.
-	retfn:getdefinitions()[1]:setinlined(true)
+	util.inline(retfn)
 	return retfn
 end
 
@@ -524,6 +526,7 @@ end
 local terra fmax(a: num, b: num)
 	if a:val() > b:val() then return a else return b end
 end
+util.inline(fmax)
 addADFunction("fmax", fmax)
 
 -- FMIN
@@ -536,6 +539,7 @@ end
 local terra fmin(a: num, b: num)
 	if a:val() < b:val() then return a else return b end
 end
+util.inline(fmin)
 addADFunction("fmin", fmin)
 
 -- LOG
