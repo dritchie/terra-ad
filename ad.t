@@ -671,7 +671,15 @@ end
 
 -- =============== EXPORTS ===============
 
-local val = macro(function(x) if x:gettype() == num then return `x:val() else return x end end)
+-- Can be called on any type (primarily num, but possibly others)
+--    that defines a 'val' method.
+local val = macro(function(x)
+	if x:gettype():getmethod("val") then
+		return `x:val()
+	else
+		return x
+	end
+end)
 
 return
 {
