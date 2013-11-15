@@ -316,6 +316,23 @@ local function addADOperator(metamethodname, numArgs, fwdFn, adjFnTemplate)
 	num.metamethods[metamethodname] = fn
 end
 
+-- Publically-exposed version of AD primitive creation
+local function makeADPrimitive(fwdFn, adjFnTemplate)
+	-- fwdFn must have only one definition
+	assert(#fwdFn:getdefinitions() == 1)
+	local typ = fwdFn:gettype()
+	-- fwdFn must return only a single value
+	assert(#typ.returns == 1)
+	-- fwdFn must take only doubles as arguments and return a double as a result
+	assert(typ.returns[1] == double)
+	for _,t in ipairs(typ.parameters) do assert(t == double) end
+
+	local numArgs = #typ.parameters
+	adjFnTemplate = adjoint(adjFnTemplate)
+	local dualfn = makeOverloadedADFunction(numArgs, fwdFn, adjFnTemplate)
+	dualfn:adddefinition(fwdFn:getdefinitions()[1])
+	return dualfn
+end
 
 ---- Operators ----
 
@@ -634,7 +651,7 @@ local terra grad(n: num)
 end
 
 -- Compute the gradient of self w.r.t all other variables
--- Until the next call to grad, the adjoints for all other variables
+-- Until the next arithmetic op on a num, the adjoints for all other variables
 --    will still be correct (though memory has been released for re-use)
 terra num:grad()
 	grad(@self)
@@ -657,7 +674,7 @@ end
 
 -- Can be called on any type (primarily num, but possibly others)
 --    that defines a 'val' method.
-local val = macro(function(x)
+local value = macro(function(x)
 	if x:gettype():getmethod("val") then
 		return `x:val()
 	else
@@ -669,11 +686,19 @@ return
 {
 	num = num,
 	math = admath,
-	val = val,
+	val = value,
 	currTapeMemUsed = currTapeMemUsed,
 	maxTapeMemUsed = maxTapeMemUsed,
 	recoverMemory = recoverMemory,
-	initGlobals = initGlobals
+	initGlobals = initGlobals,
+	def = 
+	{
+		makePrimitive = makeADPrimitive,
+		DualNumPtr = &DualNumBase,
+		adj = adj,
+		val = val,
+		setadj = setadj
+	}
 }
 
 
