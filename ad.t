@@ -67,10 +67,12 @@ local DualNum = templatize(function (...)
 			dnptr.val = val
 			dnptr.adj = 0.0
 			[makeFieldExpList(dnptr, numExtraFields)] = [args]
-			var tapeEntry : TapeEntry
-			tapeEntry.datum = dnptr
-			tapeEntry.fn = adjFn
-			tape:push(tapeEntry)
+			if adjFn ~= nil then
+				var tapeEntry : TapeEntry
+				tapeEntry.datum = dnptr
+				tapeEntry.fn = adjFn
+				tape:push(tapeEntry)
+			end
 		in
 			dnptr
 		end
@@ -96,12 +98,9 @@ terra num:adj()
 end
 util.inline(num.methods.adj)
 
-local terra nullAdjointFn(impl: VoidPtr)
-end
-
 num.metamethods.__cast = function(from, to, exp)
 	if from == double and to == num then
-		return `num { DualNumBase.new(exp, nullAdjointFn) }
+		return `num { DualNumBase.new(exp, nil) }
 	else
 		error(string.format("ad.t: Cannot cast '%s' to '%s'", tostring(from), tostring(to)))
 	end
