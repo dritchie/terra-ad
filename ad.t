@@ -226,6 +226,13 @@ local setadj = macro(function(v, adjval)
 	end
 end)
 
+-- additively accumulate into the adjoint of a particular variable
+local accumadj = macro(function(v, adjval)
+	return quote
+		setadj(v, adj(v) + adjval)
+	end
+end)
+
 -- Make an adjoint function template
 -- When choosing the DualNum type, only templatize on the arguments
 --   the are actually used (values or adjoints) in the adjoint function.
@@ -697,7 +704,7 @@ return
 		DualNumPtr = &DualNumBase,
 		adj = adj,
 		val = val,
-		setadj = setadj
+		accumadj = accumadj
 	}
 }
 
