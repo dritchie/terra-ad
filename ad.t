@@ -227,9 +227,9 @@ local setadj = macro(function(v, adjval)
 end)
 
 -- additively accumulate into the adjoint of a particular variable
-local accumadj = macro(function(v, adjval)
+local accumadj = macro(function(output, v, adjval)
 	return quote
-		setadj(v, adj(v) + adjval)
+		setadj(v, adj(v) + adj(output)*adjval)
 	end
 end)
 
