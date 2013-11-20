@@ -114,19 +114,13 @@ local cmath = terralib.includec("math.h")
 local function makeADFunction(argTypes, fwdFn, adjFn, usedArgIndices)
 
 	local params = {}
-	local paramsimpl = {}
 	local paramvals = {}
 	for i,t in ipairs(argTypes) do
-		if t == &DualNumBase then
-			t = num
-		end
 		local sym = symbol(t)
 		table.insert(params, sym)
 		if t == num then
-			table.insert(paramsimpl, `sym.impl)
 			table.insert(paramvals, `sym.impl.val)
 		else
-			table.insert(paramsimpl, sym)
 			table.insert(paramvals, sym)
 		end
 	end
@@ -134,7 +128,7 @@ local function makeADFunction(argTypes, fwdFn, adjFn, usedArgIndices)
 	local retfn = nil
 	if adjFn then
 		local templateTypes = util.index(argTypes, usedArgIndices)
-		local adjUsedParams = util.index(paramsimpl, usedArgIndices)
+		local adjUsedParams = util.index(params, usedArgIndices)
 		local DN = DualNum(unpack(templateTypes))
 		retfn = terra([params]) : num
 			return num { [&DualNumBase](DN.new(fwdFn([paramvals]), adjFn, [adjUsedParams])) }
@@ -160,7 +154,7 @@ local function makeOverloadedADFunction(numArgs, fwdFn, adjFnTemplate)
 			if bit.band(bit.tobit(2^j), bit.tobit(bitstring)) == 0 then
 				table.insert(types, double)
 			else
-				table.insert(types, &DualNumBase)
+				table.insert(types, num)
 			end
 		end
 		local adjFn, usedargindices = nil, nil
@@ -194,7 +188,7 @@ local val = macro(function(v)
 	if v:gettype() == double then
 		return v
 	else
-		return `v.val
+		return `v.impl.val
 	end
 end)
 
@@ -205,7 +199,7 @@ end)
 local adj = macro(function(v)
 	if v:gettype() ~= double then
 		usedargtable[getvalue(v)] = true
-		return `v.adj
+		return `v.impl.adj
 	else
 		return 0.0
 	end
@@ -219,7 +213,7 @@ local setadj = macro(function(v, adjval)
 	if v:gettype() ~= double then
 		usedargtable[getvalue(v)] = true
 		return quote
-			v.adj = adjval
+			v.impl.adj = adjval
 		end
 	else
 		return quote end
@@ -282,7 +276,7 @@ local function adjoint(fntemp)
 		--    gradient computation)
 		local wrappedfn = terra(impl: VoidPtr)
 			var dnum = [&DN](impl)
-			specializedfn([&DualNumBase](dnum), [makeArgsToAdjFn(dnum)])
+			specializedfn(num{[&DualNumBase](dnum)}, [makeArgsToAdjFn(dnum)])
 		end
 
 		usedargtable = nil
@@ -347,9 +341,9 @@ end
 addADOperator("__add", 2,
 macro(function(a, b) return `a + b end),
 adjoint(function(T1, T2)
-	return terra(v: &DualNumBase, a: T1, b: T2)
-		setadj(a, adj(a) + v.adj)
-		setadj(b, adj(b) + v.adj)
+	return terra(v: num, a: T1, b: T2)
+		accumadj(v, a, 1.0)
+		accumadj(v, b, 1.0)
 	end
 end))
 
@@ -357,9 +351,9 @@ end))
 addADOperator("__sub", 2,
 macro(function(a, b) return `a - b end),
 adjoint(function(T1, T2)
-	return terra(v: &DualNumBase, a: T1, b: T2)
-		setadj(a, adj(a) + v.adj)
-		setadj(b, adj(b) - v.adj)
+	return terra(v: num, a: T1, b: T2)
+		accumadj(v, a, 1.0)
+		accumadj(v, b, -1.0)
 	end
 end))
 
@@ -367,9 +361,9 @@ end))
 addADOperator("__mul", 2,
 macro(function(a, b) return `a * b end),
 adjoint(function(T1, T2)
-	return terra(v: &DualNumBase, a: T1, b: T2)
-		setadj(a, adj(a) + val(b)*v.adj)
-		setadj(b, adj(b) + val(a)*v.adj)
+	return terra(v: num, a: T1, b: T2)
+		accumadj(v, a, val(b))
+		accumadj(v, b, val(a))
 	end
 end))
 
@@ -377,9 +371,9 @@ end))
 addADOperator("__div", 2,
 macro(function(a, b) return `a / b end),
 adjoint(function(T1, T2)
-	return terra(v: &DualNumBase, a: T1, b: T2)
-		setadj(a, adj(a) + v.adj/val(b))
-		setadj(b, adj(b) - v.adj*val(a)/(val(b)*val(b)))
+	return terra(v: num, a: T1, b: T2)
+		accumadj(v, a, 1.0/val(b))
+		accumadj(v, b, -val(a)/(val(b)*val(b)))
 	end
 end))
 
@@ -387,8 +381,8 @@ end))
 addADOperator("__unm", 1,
 macro(function(a) return `-a end),
 adjoint(function(T)
-	return terra(v: &DualNumBase, a: T)
-		setadj(a, adj(a) - v.adj)
+	return terra(v: num, a: T)
+		accumadj(v, a, -1.0)
 	end
 end))
 
@@ -419,8 +413,8 @@ macro(function(a, b) return `a >= b end))
 addADFunction("acos", 1,
 cmath.acos,
 adjoint(function(T)
-	return terra(v: &DualNumBase, a: T)
-		setadj(a, adj(a) - v.adj / cmath.sqrt(1.0 - (val(a)*val(a))))
+	return terra(v: num, a: T)
+		accumadj(v, a, -1.0 / cmath.sqrt(1.0 - (val(a)*val(a))))
 	end
 end))
 
@@ -428,8 +422,8 @@ end))
 addADFunction("acosh", 1,
 cmath.acosh,
 adjoint(function(T)
-	return terra(v: &DualNumBase, a: T)
-		setadj(a, adj(a) + v.adj / cmath.sqrt((val(a)*val(a)) - 1.0))
+	return terra(v: num, a: T)
+		accumadj(v, a, 1.0 / cmath.sqrt((val(a)*val(a)) - 1.0))
 	end
 end))
 
@@ -437,8 +431,8 @@ end))
 addADFunction("asin", 1,
 cmath.asin,
 adjoint(function(T)
-	return terra(v: &DualNumBase, a: T)
-		setadj(a, adj(a) + v.adj / cmath.sqrt(1.0 - (val(a)*val(a))))
+	return terra(v: num, a: T)
+		accumadj(v, a, 1.0 / cmath.sqrt(1.0 - (val(a)*val(a))))
 	end
 end))
 
@@ -446,8 +440,8 @@ end))
 addADFunction("asinh", 1,
 cmath.asinh,
 adjoint(function(T)
-	return terra(v: &DualNumBase, a: T)
-		setadj(a, adj(a) + v.adj / cmath.sqrt((val(a)*val(a)) + 1.0))
+	return terra(v: num, a: T)
+		accumadj(v, a, 1.0 / cmath.sqrt((val(a)*val(a)) + 1.0))
 	end
 end))
 
@@ -455,8 +449,8 @@ end))
 addADFunction("atan", 1,
 cmath.atan,
 adjoint(function(T)
-	return terra(v: &DualNumBase, a: T)
-		setadj(a, adj(a) + v.adj / (1.0 + (val(a)*val(a))))
+	return terra(v: num, a: T)
+		accumadj(v, a, 1.0 / (1.0 + (val(a)*val(a))))
 	end
 end))
 
@@ -464,10 +458,10 @@ end))
 addADFunction("atan2", 2,
 cmath.atan2,
 adjoint(function(T1, T2)
-	return terra(v: &DualNumBase, a: T1, b: T2)
+	return terra(v: num, a: T1, b: T2)
 		var sqnorm = (val(a)*val(a)) + (val(b)*val(b))
-		setadj(a, adj(a) + v.adj * val(b)/sqnorm)
-		setadj(b, adj(b) - v.adj * val(a)/sqnorm)
+		accumadj(v, a, val(b)/sqnorm)
+		accumadj(v, b, -val(a)/sqnorm)
 	end
 end))
 
@@ -481,8 +475,8 @@ end)
 addADFunction("cos", 1,
 cmath.cos,
 adjoint(function(T)
-	return terra(v: &DualNumBase, a: T)
-		setadj(a, adj(a) - v.adj*cmath.sin(val(a)))
+	return terra(v: num, a: T)
+		accumadj(v, a, -cmath.sin(val(a)))
 	end
 end))
 
@@ -490,8 +484,8 @@ end))
 addADFunction("cosh", 1,
 cmath.cosh,
 adjoint(function(T)
-	return terra(v: &DualNumBase, a: T)
-		setadj(a, adj(a) + v.adj*cmath.sinh(val(a)))
+	return terra(v: num, a: T)
+		accumadj(v, a, cmath.sinh(val(a)))
 	end
 end))
 
@@ -499,8 +493,8 @@ end))
 addADFunction("exp", 1,
 cmath.exp,
 adjoint(function(T)
-	return terra(v: &DualNumBase, a: T)
-		setadj(a, adj(a) + v.adj*v.val)
+	return terra(v: num, a: T)
+		accumadj(v, a, val(v))
 	end
 end))
 
@@ -550,8 +544,8 @@ addADFunction("fmin", fmin)
 addADFunction("log", 1,
 cmath.log,
 adjoint(function(T)
-	return terra(v: &DualNumBase, a: T)
-		setadj(a, adj(a) + v.adj / val(a))
+	return terra(v: num, a: T)
+		accumadj(v, a, 1.0/val(a))
 	end
 end))
 
@@ -559,8 +553,8 @@ end))
 addADFunction("log10", 1,
 cmath.log10,
 adjoint(function(T)
-	return terra(v: &DualNumBase, a: T)
-		setadj(a, adj(a) + v.adj / ([math.log(10.0)]*val(a)))
+	return terra(v: num, a: T)
+		accumadj(v, a, 1.0/([math.log(10.0)]*val(a)))
 	end
 end))
 
@@ -568,10 +562,10 @@ end))
 addADFunction("pow", 2,
 cmath.pow,
 adjoint(function(T1, T2)
-	return terra(v: &DualNumBase, a: T1, b: T2)
+	return terra(v: num, a: T1, b: T2)
 		if val(a) ~= 0.0 then	-- Avoid log(0)
-			setadj(a, adj(a) + v.adj*val(b)*v.val/val(a))
-			setadj(b, adj(b) + v.adj*cmath.log(val(a))*v.val)
+			accumadj(v, a, val(b)*val(v)/val(a))
+			accumadj(v, b, cmath.log(val(a))*val(v))
 		end
 	end
 end))
@@ -586,8 +580,8 @@ end)
 addADFunction("sin", 1,
 cmath.sin,
 adjoint(function(T)
-	return terra(v: &DualNumBase, a: T)
-		setadj(a, adj(a) + v.adj*cmath.cos(val(a)))
+	return terra(v: num, a: T)
+		accumadj(v, a, cmath.cos(val(a)))
 	end
 end))
 
@@ -595,8 +589,8 @@ end))
 addADFunction("sinh", 1,
 cmath.sinh,
 adjoint(function(T)
-	return terra(v: &DualNumBase, a: T)
-		setadj(a, adj(a) + v.adj*cmath.cosh(val(a)))
+	return terra(v: num, a: T)
+		accumadj(v, a, cmath.cosh(val(a)))
 	end
 end))
 
@@ -604,8 +598,8 @@ end))
 addADFunction("sqrt", 1,
 cmath.sqrt,
 adjoint(function(T)
-	return terra(v: &DualNumBase, a: T)
-		setadj(a, adj(a) + v.adj / (2.0 * v.val))
+	return terra(v: num, a: T)
+		accumadj(v, a, 1.0 / (2.0 * val(v)))
 	end
 end))
 
@@ -613,8 +607,8 @@ end))
 addADFunction("tan", 1,
 cmath.tan,
 adjoint(function(T)
-	return terra(v: &DualNumBase, a: T)
-		setadj(a, adj(a) + v.adj*(1.0 + v.val*v.val))
+	return terra(v: num, a: T)
+		accumadj(v, a, 1.0 + val(v)*val(v))
 	end
 end))
 
@@ -622,9 +616,9 @@ end))
 addADFunction("tanh", 1,
 cmath.tanh,
 adjoint(function(T)
-	return terra(v: &DualNumBase, a: T)
+	return terra(v: num, a: T)
 		var c = cmath.cosh(val(a))
-		setadj(a, adj(a) + v.adj / (c*c))
+		accumadj(v, a, 1.0 / (c*c))
 	end
 end))
 
@@ -701,8 +695,6 @@ return
 	def = 
 	{
 		makePrimitive = makeADPrimitive,
-		DualNumPtr = &DualNumBase,
-		adj = adj,
 		val = val,
 		accumadj = accumadj
 	}
