@@ -208,13 +208,14 @@ local function makeADFunction(argTypes, fwdFn, adjFn, usedArgIndices)
 	return retfn
 end
 
-local function makeOverloadedADFunction(numArgs, fwdFn, adjFnTemplate)
+-- Last arg is optional, specifies how to 'group' args into blocks of the same type
+local function makeOverloadedADFunction(numArgTypes, fwdFn, adjFnTemplate, compsPerType)
 	local overallfn = nil
-	local numVariants = 2 ^ numArgs
+	local numVariants = 2 ^ numArgTypes
 	local bitstring = 1
 	for i=1,numVariants-1 do
 		local types = {}
-		for j=0,numArgs-1 do
+		for j=0,numArgTypes-1 do
 			local typ = nil
 			if bit.band(bit.tobit(2^j), bit.tobit(bitstring)) == 0 then
 				typ = double
@@ -222,6 +223,15 @@ local function makeOverloadedADFunction(numArgs, fwdFn, adjFnTemplate)
 				typ = num
 			end
 			table.insert(types, typ)
+		end
+		-- Create multiple instances of each arg type, if called for
+		if compsPerType then
+			local duptypes = {}
+			for i,t in ipairs(types) do
+				local numdups = compsPerType[i]
+				for j=1,numdups do table.insert(duptypes, t) end
+			end
+			types = duptypes
 		end
 		local adjArgTypes = {}
 		for _,t in ipairs(types) do table.insert(adjArgTypes, Untouched(t)) end
@@ -333,7 +343,9 @@ local function addADOperator(metamethodname, numArgs, fwdFn, adjFnTemplate)
 end
 
 -- Publically-exposed version of AD primitive creation
-local function makeADPrimitive(fwdFn, adjFnTemplate)
+-- Last arg is optional, specifies how to 'group' arguments into blocks 
+--    of the same type
+local function makeADPrimitive(fwdFn, adjFnTemplate, compsPerType)
 	-- fwdFn must have only one definition
 	assert(#fwdFn:getdefinitions() == 1)
 	local typ = fwdFn:gettype()
@@ -343,9 +355,9 @@ local function makeADPrimitive(fwdFn, adjFnTemplate)
 	assert(typ.returns[1] == double)
 	for _,t in ipairs(typ.parameters) do assert(t == double) end
 
-	local numArgs = #typ.parameters
+	local numArgTypes = compsPerType and #compsPerType or #typ.parameters 
 	adjFnTemplate = adjoint(adjFnTemplate)
-	local dualfn = makeOverloadedADFunction(numArgs, fwdFn, adjFnTemplate)
+	local dualfn = makeOverloadedADFunction(numArgTypes, fwdFn, adjFnTemplate, compsPerType)
 	dualfn:adddefinition(fwdFn:getdefinitions()[1])
 	return dualfn
 end
