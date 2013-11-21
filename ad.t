@@ -82,6 +82,7 @@ local DualNum = templatize(function (...)
 end)
 local DualNumBase = DualNum()
 
+
 -- The externally-visible dual number type
 local struct num
 {
@@ -110,6 +111,69 @@ end
 -- =============== FUNCTION GENERATION ===============
 
 local cmath = terralib.includec("math.h")
+
+
+local function getvalue(terraquote)
+	assert(terraquote.tree.expression.value)
+	return terraquote.tree.expression.value
+end
+
+-- Boxing up values so that they must be 'touched' before they can
+--    be used.
+-- Records whether or not it has been touched.
+local usedargtable = nil
+local Untouched = templatize(function(T)
+	local struct UntouchedT { value: T }
+	UntouchedT.metamethods.__apply = macro(function(self)
+		usedargtable[getvalue(self)] = true
+		return `self.value
+	end)
+	UntouchedT.ValueType = T
+	return UntouchedT
+end)
+
+-- Can be called on any type (primarily num, but possibly others)
+--    that defines a 'val' method.
+-- Extracts the primal value 
+local val = macro(function(x)
+	if x:gettype():getmethod("val") then
+		return `x:val()
+	else
+		return x
+	end
+end)
+
+
+-- Extract the adjoint from a variable
+-- (A no-op if the variable is actually a constant)
+local adj = macro(function(v)
+	if v:gettype() == num then
+		return `v.impl.adj
+	else
+		return 0.0
+	end
+end)
+
+-- Set the adjoint of a particular variable
+-- (Performs a no-op if the variable is actually a constant)
+local setadj = macro(function(v, adjval)
+	if v:gettype() == num then
+		return quote
+			v.impl.adj = adjval
+		end
+	else
+		return quote end
+	end
+end)
+
+-- Additively accumulate into the adjoint of a particular variable
+-- (Performs a no-op if the variable is actually a constant)
+local accumadj = macro(function(output, v, adjval)
+	return quote
+		setadj(v, adj(v) + adj(output)*adjval)
+	end
+end)
+
 
 local function makeADFunction(argTypes, fwdFn, adjFn, usedArgIndices)
 
@@ -151,15 +215,19 @@ local function makeOverloadedADFunction(numArgs, fwdFn, adjFnTemplate)
 	for i=1,numVariants-1 do
 		local types = {}
 		for j=0,numArgs-1 do
+			local typ = nil
 			if bit.band(bit.tobit(2^j), bit.tobit(bitstring)) == 0 then
-				table.insert(types, double)
+				typ = double
 			else
-				table.insert(types, num)
+				typ = num
 			end
+			table.insert(types, typ)
 		end
+		local adjArgTypes = {}
+		for _,t in ipairs(types) do table.insert(adjArgTypes, Untouched(t)) end
 		local adjFn, usedargindices = nil, nil
 		if adjFnTemplate then 
-			adjFn, usedargindices = adjFnTemplate(unpack(types))
+			adjFn, usedargindices = adjFnTemplate(unpack(adjArgTypes))
 		end
 		local fn = makeADFunction(types, fwdFn, adjFn, usedargindices)
 		if not overallfn then
@@ -172,60 +240,6 @@ local function makeOverloadedADFunction(numArgs, fwdFn, adjFnTemplate)
 	util.inline(overallfn)
 	return overallfn
 end
-
-local function getvalue(terraquote)
-	assert(terraquote.tree.expression.value)
-	return terraquote.tree.expression.value
-end
-
--- Extract the numeric value from a number regardless of whether
---    it is a double or a dual number.
--- Record which values have been extracted during adjoint function
---    construction.
-local usedargtable = nil
-local val = macro(function(v)
-	usedargtable[getvalue(v)] = true
-	if v:gettype() == double then
-		return v
-	else
-		return `v.impl.val
-	end
-end)
-
--- Extract the adjoint from a variable
--- (A no-op if the variable is actually a constant)
--- Record which adjoints have been extracted during adjoint function
---    construction.
-local adj = macro(function(v)
-	if v:gettype() ~= double then
-		usedargtable[getvalue(v)] = true
-		return `v.impl.adj
-	else
-		return 0.0
-	end
-end)
-
--- Set the adjoint of a particular variable
--- (Performs a no-op if the variable is actually a constant)
--- Record which adjoints have been set during adjoint function
---   construction.
-local setadj = macro(function(v, adjval)
-	if v:gettype() ~= double then
-		usedargtable[getvalue(v)] = true
-		return quote
-			v.impl.adj = adjval
-		end
-	else
-		return quote end
-	end
-end)
-
--- additively accumulate into the adjoint of a particular variable
-local accumadj = macro(function(output, v, adjval)
-	return quote
-		setadj(v, adj(v) + adj(output)*adjval)
-	end
-end)
 
 -- Make an adjoint function template
 -- When choosing the DualNum type, only templatize on the arguments
@@ -247,7 +261,7 @@ local function adjoint(fntemp)
 			if i ~= 1 then
 				if usedargtable[arg.symbol] then
 					table.insert(usedtypeindices, i-1)
-					table.insert(usedtypes, arg.type)
+					table.insert(usedtypes, arg.type.ValueType)
 				end
 			end
 		end	
@@ -262,10 +276,11 @@ local function adjoint(fntemp)
 			for i,arg in ipairs(adjfnparams) do
 				if i ~= 1 then
 					if usedargtable[arg.symbol] then
-						table.insert(argstoadjfn, `dnum.[string.format("_%d", currFieldIndex+2)])
+						local exp = `[arg.type] { dnum.[string.format("_%d", currFieldIndex+2)] }
+						table.insert(argstoadjfn, exp)
 						currFieldIndex = currFieldIndex + 1
 					else
-						table.insert(argstoadjfn, `[arg.type](0))
+						table.insert(argstoadjfn, `[arg.type] { 0.0 })
 					end
 				end
 			end
@@ -342,8 +357,8 @@ addADOperator("__add", 2,
 macro(function(a, b) return `a + b end),
 adjoint(function(T1, T2)
 	return terra(v: num, a: T1, b: T2)
-		accumadj(v, a, 1.0)
-		accumadj(v, b, 1.0)
+		accumadj(v, a(), 1.0)
+		accumadj(v, b(), 1.0)
 	end
 end))
 
@@ -352,8 +367,8 @@ addADOperator("__sub", 2,
 macro(function(a, b) return `a - b end),
 adjoint(function(T1, T2)
 	return terra(v: num, a: T1, b: T2)
-		accumadj(v, a, 1.0)
-		accumadj(v, b, -1.0)
+		accumadj(v, a(), 1.0)
+		accumadj(v, b(), -1.0)
 	end
 end))
 
@@ -362,8 +377,8 @@ addADOperator("__mul", 2,
 macro(function(a, b) return `a * b end),
 adjoint(function(T1, T2)
 	return terra(v: num, a: T1, b: T2)
-		accumadj(v, a, val(b))
-		accumadj(v, b, val(a))
+		accumadj(v, a(), val(b()))
+		accumadj(v, b(), val(a()))
 	end
 end))
 
@@ -372,8 +387,8 @@ addADOperator("__div", 2,
 macro(function(a, b) return `a / b end),
 adjoint(function(T1, T2)
 	return terra(v: num, a: T1, b: T2)
-		accumadj(v, a, 1.0/val(b))
-		accumadj(v, b, -val(a)/(val(b)*val(b)))
+		accumadj(v, a(), 1.0/val(b()))
+		accumadj(v, b(), -val(a())/(val(b())*val(b())))
 	end
 end))
 
@@ -382,7 +397,7 @@ addADOperator("__unm", 1,
 macro(function(a) return `-a end),
 adjoint(function(T)
 	return terra(v: num, a: T)
-		accumadj(v, a, -1.0)
+		accumadj(v, a(), -1.0)
 	end
 end))
 
@@ -414,7 +429,7 @@ addADFunction("acos", 1,
 cmath.acos,
 adjoint(function(T)
 	return terra(v: num, a: T)
-		accumadj(v, a, -1.0 / cmath.sqrt(1.0 - (val(a)*val(a))))
+		accumadj(v, a(), -1.0 / cmath.sqrt(1.0 - (val(a())*val(a()))))
 	end
 end))
 
@@ -423,7 +438,7 @@ addADFunction("acosh", 1,
 cmath.acosh,
 adjoint(function(T)
 	return terra(v: num, a: T)
-		accumadj(v, a, 1.0 / cmath.sqrt((val(a)*val(a)) - 1.0))
+		accumadj(v, a(), 1.0 / cmath.sqrt((val(a())*val(a())) - 1.0))
 	end
 end))
 
@@ -432,7 +447,7 @@ addADFunction("asin", 1,
 cmath.asin,
 adjoint(function(T)
 	return terra(v: num, a: T)
-		accumadj(v, a, 1.0 / cmath.sqrt(1.0 - (val(a)*val(a))))
+		accumadj(v, a(), 1.0 / cmath.sqrt(1.0 - (val(a())*val(a()))))
 	end
 end))
 
@@ -441,7 +456,7 @@ addADFunction("asinh", 1,
 cmath.asinh,
 adjoint(function(T)
 	return terra(v: num, a: T)
-		accumadj(v, a, 1.0 / cmath.sqrt((val(a)*val(a)) + 1.0))
+		accumadj(v, a(), 1.0 / cmath.sqrt((val(a())*val(a())) + 1.0))
 	end
 end))
 
@@ -450,7 +465,7 @@ addADFunction("atan", 1,
 cmath.atan,
 adjoint(function(T)
 	return terra(v: num, a: T)
-		accumadj(v, a, 1.0 / (1.0 + (val(a)*val(a))))
+		accumadj(v, a(), 1.0 / (1.0 + (val(a())*val(a()))))
 	end
 end))
 
@@ -459,9 +474,9 @@ addADFunction("atan2", 2,
 cmath.atan2,
 adjoint(function(T1, T2)
 	return terra(v: num, a: T1, b: T2)
-		var sqnorm = (val(a)*val(a)) + (val(b)*val(b))
-		accumadj(v, a, val(b)/sqnorm)
-		accumadj(v, b, -val(a)/sqnorm)
+		var sqnorm = (val(a())*val(a())) + (val(b())*val(b()))
+		accumadj(v, a(), val(b())/sqnorm)
+		accumadj(v, b(), -val(a())/sqnorm)
 	end
 end))
 
@@ -476,7 +491,7 @@ addADFunction("cos", 1,
 cmath.cos,
 adjoint(function(T)
 	return terra(v: num, a: T)
-		accumadj(v, a, -cmath.sin(val(a)))
+		accumadj(v, a(), -cmath.sin(val(a())))
 	end
 end))
 
@@ -485,7 +500,7 @@ addADFunction("cosh", 1,
 cmath.cosh,
 adjoint(function(T)
 	return terra(v: num, a: T)
-		accumadj(v, a, cmath.sinh(val(a)))
+		accumadj(v, a(), cmath.sinh(val(a())))
 	end
 end))
 
@@ -494,7 +509,7 @@ addADFunction("exp", 1,
 cmath.exp,
 adjoint(function(T)
 	return terra(v: num, a: T)
-		accumadj(v, a, val(v))
+		accumadj(v, a(), val(v))
 	end
 end))
 
@@ -545,7 +560,7 @@ addADFunction("log", 1,
 cmath.log,
 adjoint(function(T)
 	return terra(v: num, a: T)
-		accumadj(v, a, 1.0/val(a))
+		accumadj(v, a(), 1.0/val(a()))
 	end
 end))
 
@@ -554,7 +569,7 @@ addADFunction("log10", 1,
 cmath.log10,
 adjoint(function(T)
 	return terra(v: num, a: T)
-		accumadj(v, a, 1.0/([math.log(10.0)]*val(a)))
+		accumadj(v, a(), 1.0/([math.log(10.0)]*val(a())))
 	end
 end))
 
@@ -563,9 +578,9 @@ addADFunction("pow", 2,
 cmath.pow,
 adjoint(function(T1, T2)
 	return terra(v: num, a: T1, b: T2)
-		if val(a) ~= 0.0 then	-- Avoid log(0)
-			accumadj(v, a, val(b)*val(v)/val(a))
-			accumadj(v, b, cmath.log(val(a))*val(v))
+		if val(a()) ~= 0.0 then	-- Avoid log(0)
+			accumadj(v, a(), val(b())*val(v)/val(a()))
+			accumadj(v, b(), cmath.log(val(a()))*val(v))
 		end
 	end
 end))
@@ -581,7 +596,7 @@ addADFunction("sin", 1,
 cmath.sin,
 adjoint(function(T)
 	return terra(v: num, a: T)
-		accumadj(v, a, cmath.cos(val(a)))
+		accumadj(v, a(), cmath.cos(val(a())))
 	end
 end))
 
@@ -590,7 +605,7 @@ addADFunction("sinh", 1,
 cmath.sinh,
 adjoint(function(T)
 	return terra(v: num, a: T)
-		accumadj(v, a, cmath.cosh(val(a)))
+		accumadj(v, a(), cmath.cosh(val(a())))
 	end
 end))
 
@@ -599,7 +614,7 @@ addADFunction("sqrt", 1,
 cmath.sqrt,
 adjoint(function(T)
 	return terra(v: num, a: T)
-		accumadj(v, a, 1.0 / (2.0 * val(v)))
+		accumadj(v, a(), 1.0 / (2.0 * val(v)))
 	end
 end))
 
@@ -608,7 +623,7 @@ addADFunction("tan", 1,
 cmath.tan,
 adjoint(function(T)
 	return terra(v: num, a: T)
-		accumadj(v, a, 1.0 + val(v)*val(v))
+		accumadj(v, a(), 1.0 + val(v)*val(v))
 	end
 end))
 
@@ -617,8 +632,8 @@ addADFunction("tanh", 1,
 cmath.tanh,
 adjoint(function(T)
 	return terra(v: num, a: T)
-		var c = cmath.cosh(val(a))
-		accumadj(v, a, 1.0 / (c*c))
+		var c = cmath.cosh(val(a()))
+		accumadj(v, a(), 1.0 / (c*c))
 	end
 end))
 
@@ -673,21 +688,11 @@ end
 
 -- =============== EXPORTS ===============
 
--- Can be called on any type (primarily num, but possibly others)
---    that defines a 'val' method.
-local value = macro(function(x)
-	if x:gettype():getmethod("val") then
-		return `x:val()
-	else
-		return x
-	end
-end)
-
 return
 {
 	num = num,
 	math = admath,
-	val = value,
+	val = val,
 	currTapeMemUsed = currTapeMemUsed,
 	maxTapeMemUsed = maxTapeMemUsed,
 	recoverMemory = recoverMemory,
@@ -695,7 +700,6 @@ return
 	def = 
 	{
 		makePrimitive = makeADPrimitive,
-		val = val,
 		accumadj = accumadj
 	}
 }
