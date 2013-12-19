@@ -110,7 +110,7 @@ end
 
 -- =============== FUNCTION GENERATION ===============
 
-local cmath = terralib.includec("math.h")
+local cmath = util.includec_path("math.h")
 
 
 local function getvalue(terraquote)
@@ -316,9 +316,6 @@ local admath = util.copytable(cmath)
 
 local function addADFunction_simple(name, fn)
 	local primalfn = admath[name]
-	if not primalfn then
-		error(string.format("ad.t: Cannot add overloaded dual function '%s' for which there is no primal function in cmath", name))
-	end
 	for i,def in ipairs(fn:getdefinitions()) do
 		primalfn:adddefinition(def)
 	end
@@ -330,10 +327,15 @@ local function addADFunction_overloaded(name, numArgs, fwdFn, adjFnTemplate)
 end
 
 local function addADFunction(...)
-	if select("#",...) == 2 then
-		addADFunction_simple(...)
-	else
-		addADFunction_overloaded(...)
+	local name = (select(1,...))
+	-- We silently skip any functions that aren't defined in cmath
+	-- (e.g. hyperbolic trig functions don't always exist on Windows)
+	if cmath[name] then
+		if select("#",...) == 2 then
+			addADFunction_simple(...)
+		else
+			addADFunction_overloaded(...)
+		end
 	end
 end
 

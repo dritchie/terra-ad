@@ -36,275 +36,338 @@ local terra gradtest(name: str, dep: num, trueval: double, indeps: Vector(num), 
 	m.destruct(truegrad)
 end
 
+local function runTestIf(testModule, condition)
+	if condition then
+		local test = testModule()
+		test()
+	end
+end
+
 -------------------------------------------------
 
-local terra testadd()
-	var x = ad.num(1.0)
-	var y = ad.num(3.5)
-	var z = x + y
-	gradtest("add operator", z, 4.5,
-			 Array(x, y),
-			 Array(1.0, 1.0))
-end
-testadd()
+runTestIf(function()
+	return terra()
+		var x = ad.num(1.0)
+		var y = ad.num(3.5)
+		var z = x + y
+		gradtest("add operator", z, 4.5,
+				 Array(x, y),
+				 Array(1.0, 1.0))
+	end
+end,
+true)
 
-local terra testsub()
-	var x = ad.num(1.0)
-	var y = ad.num(3.5)
-	var z = x - y
-	gradtest("sub operator", z, -2.5,
-			 Array(x, y),
-			 Array(1.0, -1.0))
-end
-testsub()
+runTestIf(function()
+		return terra()
+		var x = ad.num(1.0)
+		var y = ad.num(3.5)
+		var z = x - y
+		gradtest("sub operator", z, -2.5,
+				 Array(x, y),
+				 Array(1.0, -1.0))
+	end
+end,
+true)
 
-local terra testmul()
-	var x = ad.num(2.0)
-	var y = ad.num(5.0)
-	var z = x * y
-	gradtest("mul operator", z, 10.0,
-			 Array(x, y),
-			 Array(1.0*5.0 + 2.0*0.0, 0.0*5.0 + 2.0*1.0))
-end
-testmul()
+runTestIf(function()
+	return terra()
+		var x = ad.num(2.0)
+		var y = ad.num(5.0)
+		var z = x * y
+		gradtest("mul operator", z, 10.0,
+				 Array(x, y),
+				 Array(1.0*5.0 + 2.0*0.0, 0.0*5.0 + 2.0*1.0))
+	end
+end,
+true)
 
-local terra testdiv()
-	var x = ad.num(10.0)
-	var y = ad.num(2.0)
-	var z = x / y
-	gradtest("div operator", z, 5.0,
-			 Array(x, y),
-			 Array((1.0*2.0 - 10.0*0.0)/(2.0*2.0),
-			 		(0.0*2.0 - 10.0*1.0)/(2.0*2.0)))
-end
-testdiv()
+runTestIf(function()
+	return terra()
+		var x = ad.num(10.0)
+		var y = ad.num(2.0)
+		var z = x / y
+		gradtest("div operator", z, 5.0,
+				 Array(x, y),
+				 Array((1.0*2.0 - 10.0*0.0)/(2.0*2.0),
+				 		(0.0*2.0 - 10.0*1.0)/(2.0*2.0)))
+	end
+end,
+true)
 
-local terra testacos()
-	var x = ad.num(0.5)
-	var z = ad.math.acos(x)
-	gradtest("acos function", z, cmath.acos(0.5),
-			 Array(x),
-			 Array(-1.0/cmath.sqrt(1.0-0.5*0.5)))
-end
-testacos()
+runTestIf(function()
+	return terra()
+		var x = ad.num(0.5)
+		var z = ad.math.acos(x)
+		gradtest("acos function", z, cmath.acos(0.5),
+				 Array(x),
+				 Array(-1.0/cmath.sqrt(1.0-0.5*0.5)))
+	end
+end,
+ad.math.acos)
 
-local terra testacosh()
-	var x = ad.num(1.4)
-	var z = ad.math.acosh(x)
-	gradtest("acosh function", z, cmath.acosh(1.4),
-			 Array(x),
-			 Array(1.0/cmath.sqrt(1.4*1.4-1.0)))
-end
-testacosh()
+runTestIf(function()
+	return terra()
+		var x = ad.num(1.4)
+		var z = ad.math.acosh(x)
+		gradtest("acosh function", z, cmath.acosh(1.4),
+				 Array(x),
+				 Array(1.0/cmath.sqrt(1.4*1.4-1.0)))
+	end
+end,
+ad.math.acosh)
 
-local terra testasin()
-	var x = ad.num(0.7)
-	var z = ad.math.asin(x)
-	gradtest("asin function", z, cmath.asin(0.7),
-			 Array(x),
-			 Array(1.0/cmath.sqrt(1.0-0.7*0.7)))
-end
-testasin()
+runTestIf(function()
+	return terra()
+		var x = ad.num(0.7)
+		var z = ad.math.asin(x)
+		gradtest("asin function", z, cmath.asin(0.7),
+				 Array(x),
+				 Array(1.0/cmath.sqrt(1.0-0.7*0.7)))
+	end
+end,
+ad.math.asin)
 
-local terra testasinh()
-	var x = ad.num(-0.3)
-	var z = ad.math.asinh(x)
-	gradtest("asinh function", z, cmath.asinh(-0.3),
-			 Array(x),
-			 Array(1.0/cmath.sqrt(0.3*0.3+1.0)))
-end
-testasinh()
+runTestIf(function()
+	return terra()
+		var x = ad.num(-0.3)
+		var z = ad.math.asinh(x)
+		gradtest("asinh function", z, cmath.asinh(-0.3),
+				 Array(x),
+				 Array(1.0/cmath.sqrt(0.3*0.3+1.0)))
+	end
+end,
+ad.math.asinh)
 
-local terra testatan()
-	var x = ad.num(0.22)
-	var z = ad.math.atan(x)
-	gradtest("atan function", z, cmath.atan(0.22),
-			 Array(x),
-			 Array(1.0/(1.0+0.22*0.22)))
-end
-testatan()
+runTestIf(function()
+	return terra()
+		var x = ad.num(0.22)
+		var z = ad.math.atan(x)
+		gradtest("atan function", z, cmath.atan(0.22),
+				 Array(x),
+				 Array(1.0/(1.0+0.22*0.22)))
+	end
+end,
+ad.math.atan)
 
 -- TODO: Test for atan2 (got lazy; didn't want to do calculus...)
 
-local terra testcos()
-	var x = ad.num(1.1)
-	var z = ad.math.cos(x)
-	gradtest("cos function", z, cmath.cos(1.1),
-			 Array(x),
-			 Array(-cmath.sin(1.1)))
-end
-testcos()
+runTestIf(function()
+	return terra()
+		var x = ad.num(1.1)
+		var z = ad.math.cos(x)
+		gradtest("cos function", z, cmath.cos(1.1),
+				 Array(x),
+				 Array(-cmath.sin(1.1)))
+	end
+end,
+ad.math.cos)
 
-local terra testcosh()
-	var x = ad.num(-0.9)
-	var z = ad.math.cosh(x)
-	gradtest("cosh function", z, cmath.cosh(-0.9),
-			 Array(x),
-			 Array(cmath.sinh(-0.9)))
-end
-testcosh()
+runTestIf(function()
+	return terra()
+		var x = ad.num(-0.9)
+		var z = ad.math.cosh(x)
+		gradtest("cosh function", z, cmath.cosh(-0.9),
+				 Array(x),
+				 Array(cmath.sinh(-0.9)))
+	end
+end,
+ad.math.cosh)
 
-local terra testexp()
-	var x = ad.num(0.6)
-	var z = ad.math.exp(x)
-	gradtest("exp function", z, cmath.exp(0.6),
-			 Array(x),
-			 Array(cmath.exp(0.6)))
-end
-testexp()
+runTestIf(function()
+	return terra()
+		var x = ad.num(0.6)
+		var z = ad.math.exp(x)
+		gradtest("exp function", z, cmath.exp(0.6),
+				 Array(x),
+				 Array(cmath.exp(0.6)))
+	end
+end,
+ad.math.exp)
 
-local terra testfmax1()
-	var x = ad.num(2.0)
-	var y = ad.num(5.0)
-	var z = ad.math.fmax(x, y)
-	gradtest("fmax function (1)", z, 5.0,
-			 Array(x, y),
-			 Array(0.0, 1.0))
-end
-testfmax1()
+runTestIf(function()
+	return terra()
+		var x = ad.num(2.0)
+		var y = ad.num(5.0)
+		var z = ad.math.fmax(x, y)
+		gradtest("fmax function (1)", z, 5.0,
+				 Array(x, y),
+				 Array(0.0, 1.0))
+	end
+end,
+ad.math.fmax)
 
-local terra testfmax2()
-	var x = ad.num(8.0)
-	var y = ad.num(5.0)
-	var z = ad.math.fmax(x, y)
-	gradtest("fmax function (2)", z, 8.0,
-			 Array(x, y),
-			 Array(1.0, 0.0))
-end
-testfmax2()
+runTestIf(function()
+	return terra()
+		var x = ad.num(8.0)
+		var y = ad.num(5.0)
+		var z = ad.math.fmax(x, y)
+		gradtest("fmax function (2)", z, 8.0,
+				 Array(x, y),
+				 Array(1.0, 0.0))
+	end
+end,
+ad.math.fmax)
 
-local terra testfmax3()
-	var x = 2.0
-	var y = ad.num(5.0)
-	var z = ad.math.fmax(x, y)
-	gradtest("fmax function (3)", z, 5.0,
-			 Array(y),
-			 Array(1.0))
-end
-testfmax3()
+runTestIf(function()
+	return terra()
+		var x = 2.0
+		var y = ad.num(5.0)
+		var z = ad.math.fmax(x, y)
+		gradtest("fmax function (3)", z, 5.0,
+				 Array(y),
+				 Array(1.0))
+	end
+end,
+ad.math.fmax)
 
-local terra testfmax4()
-	var x = 8.0
-	var y = ad.num(5.0)
-	var z = ad.math.fmax(x, y)
-	gradtest("fmax function (4)", z, 8.0,
-			 Array(y),
-			 Array(0.0))
-end
-testfmax4()
+runTestIf(function()
+	return terra()
+		var x = 8.0
+		var y = ad.num(5.0)
+		var z = ad.math.fmax(x, y)
+		gradtest("fmax function (4)", z, 8.0,
+				 Array(y),
+				 Array(0.0))
+	end
+end,
+ad.math.fmax)
 
-local terra testfmin1()
-	var x = ad.num(2.0)
-	var y = ad.num(5.0)
-	var z = ad.math.fmin(x, y)
-	gradtest("fmin function (1)", z, 2.0,
-			 Array(x, y),
-			 Array(1.0, 0.0))
-end
-testfmin1()
+runTestIf(function()
+	return terra()
+		var x = ad.num(2.0)
+		var y = ad.num(5.0)
+		var z = ad.math.fmin(x, y)
+		gradtest("fmin function (1)", z, 2.0,
+				 Array(x, y),
+				 Array(1.0, 0.0))
+	end
+end,
+ad.math.fmin)
 
-local terra testfmin2()
-	var x = ad.num(8.0)
-	var y = ad.num(5.0)
-	var z = ad.math.fmin(x, y)
-	gradtest("fmin function (2)", z, 5.0,
-			 Array(x, y),
-			 Array(0.0, 1.0))
-end
-testfmin2()
+runTestIf(function()
+	return terra()
+		var x = ad.num(8.0)
+		var y = ad.num(5.0)
+		var z = ad.math.fmin(x, y)
+		gradtest("fmin function (2)", z, 5.0,
+				 Array(x, y),
+				 Array(0.0, 1.0))
+	end
+end,
+ad.math.fmin)
 
-local terra testfmin3()
-	var x = 2.0
-	var y = ad.num(5.0)
-	var z = ad.math.fmin(x, y)
-	gradtest("fmin function (3)", z, 2.0,
-			 Array(y),
-			 Array(0.0))
-end
-testfmin3()
+runTestIf(function()
+	return terra()
+		var x = 2.0
+		var y = ad.num(5.0)
+		var z = ad.math.fmin(x, y)
+		gradtest("fmin function (3)", z, 2.0,
+				 Array(y),
+				 Array(0.0))
+	end
+end,
+ad.math.fmin)
 
-local terra testfmin4()
-	var x = 8.0
-	var y = ad.num(5.0)
-	var z = ad.math.fmin(x, y)
-	gradtest("fmin function (4)", z, 5.0,
-			 Array(y),
-			 Array(1.0))
-end
-testfmin4()
+runTestIf(function()
+	return terra()
+		var x = 8.0
+		var y = ad.num(5.0)
+		var z = ad.math.fmin(x, y)
+		gradtest("fmin function (4)", z, 5.0,
+				 Array(y),
+				 Array(1.0))
+	end
+end,
+ad.math.fmin)
 
-local terra testlog()
-	var x = ad.num(30.24)
-	var z = ad.math.log(x)
-	gradtest("log function", z, cmath.log(30.24),
-			 Array(x),
-			 Array(1.0/30.24))
-end
-testlog()
+runTestIf(function()
+	return terra()
+		var x = ad.num(30.24)
+		var z = ad.math.log(x)
+		gradtest("log function", z, cmath.log(30.24),
+				 Array(x),
+				 Array(1.0/30.24))
+	end
+end,
+ad.math.log)
 
-local terra testlog10()
-	var x = ad.num(89.11)
-	var z = ad.math.log10(x)
-	gradtest("log10 function", z, cmath.log10(89.11),
-			 Array(x),
-			 Array(1.0/(89.11*cmath.log(10))))
-end
-testlog10()
+runTestIf(function()
+	return terra()
+		var x = ad.num(89.11)
+		var z = ad.math.log10(x)
+		gradtest("log10 function", z, cmath.log10(89.11),
+				 Array(x),
+				 Array(1.0/(89.11*cmath.log(10))))
+	end
+end,
+ad.math.log10)
 
-local terra testpow()
-	var x = ad.num(2.3)
-	var y = ad.num(-4.2)
-	var z = ad.math.pow(x, y)
-	gradtest("pow function", z, cmath.pow(2.3, -4.2),
-			 Array(x, y),
-			 Array(-4.2*cmath.pow(2.3, -5.2), cmath.pow(2.3, -4.2)*cmath.log(2.3)))
-end
-testpow()
+runTestIf(function()
+	return terra()
+		var x = ad.num(2.3)
+		var y = ad.num(-4.2)
+		var z = ad.math.pow(x, y)
+		gradtest("pow function", z, cmath.pow(2.3, -4.2),
+				 Array(x, y),
+				 Array(-4.2*cmath.pow(2.3, -5.2), cmath.pow(2.3, -4.2)*cmath.log(2.3)))
+	end
+end,
+ad.math.pow)
 
-local terra testsin()
-	var x = ad.num(1.1)
-	var z = ad.math.sin(x)
-	gradtest("sin function", z, cmath.sin(1.1),
-			 Array(x),
-			 Array(cmath.cos(1.1)))
-end
-testsin()
+runTestIf(function()
+	return terra()
+		var x = ad.num(1.1)
+		var z = ad.math.sin(x)
+		gradtest("sin function", z, cmath.sin(1.1),
+				 Array(x),
+				 Array(cmath.cos(1.1)))
+	end
+end,
+ad.math.sin)
 
-local terra testsinh()
-	var x = ad.num(-0.9)
-	var z = ad.math.sinh(x)
-	gradtest("sinh function", z, cmath.sinh(-0.9),
-			 Array(x),
-			 Array(cmath.cosh(-0.9)))
-end
-testsinh()
+runTestIf(function()
+	return terra()
+		var x = ad.num(-0.9)
+		var z = ad.math.sinh(x)
+		gradtest("sinh function", z, cmath.sinh(-0.9),
+				 Array(x),
+				 Array(cmath.cosh(-0.9)))
+	end
+end,
+ad.math.sinh)
 
-local terra testsqrt()
-	var x = ad.num(123.52)
-	var z = ad.math.sqrt(x)
-	gradtest("sqrt function", z, cmath.sqrt(123.52),
-			 Array(x),
-			 Array(1.0/(2.0*cmath.sqrt(123.52))))
-end
-testsqrt()
+runTestIf(function()
+	return terra()
+		var x = ad.num(123.52)
+		var z = ad.math.sqrt(x)
+		gradtest("sqrt function", z, cmath.sqrt(123.52),
+				 Array(x),
+				 Array(1.0/(2.0*cmath.sqrt(123.52))))
+	end
+end,
+ad.math.sqrt)
 
-local terra testtan()
-	var x = ad.num(1.1)
-	var z = ad.math.tan(x)
-	gradtest("tan function", z, cmath.tan(1.1),
-			 Array(x),
-			 Array(1.0 + cmath.tan(1.1)*cmath.tan(1.1)))
-end
-testtan()
+runTestIf(function()
+	return terra()
+		var x = ad.num(1.1)
+		var z = ad.math.tan(x)
+		gradtest("tan function", z, cmath.tan(1.1),
+				 Array(x),
+				 Array(1.0 + cmath.tan(1.1)*cmath.tan(1.1)))
+	end
+end,
+ad.math.tan)
 
-local terra testtanh()
-	var x = ad.num(-0.9)
-	var z = ad.math.tanh(x)
-	gradtest("tanh function", z, cmath.tanh(-0.9),
-			 Array(x),
-			 Array(1.0/(cmath.cosh(-0.9)*cmath.cosh(-0.9))))
-end
-testtanh()
+runTestIf(function()
+	return terra()
+		var x = ad.num(-0.9)
+		var z = ad.math.tanh(x)
+		gradtest("tanh function", z, cmath.tanh(-0.9),
+				 Array(x),
+				 Array(1.0/(cmath.cosh(-0.9)*cmath.cosh(-0.9))))
+	end
+end,
+ad.math.tanh)
 
 
 print()
