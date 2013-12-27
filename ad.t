@@ -496,7 +496,7 @@ end))
 
 -- CEIL
 addADFunction("ceil",
-terra(a: num)
+terra(a: num) : num
 	return num(cmath.ceil(a:val()))
 end)
 
@@ -539,7 +539,7 @@ end)
 
 -- FLOOR
 addADFunction("floor",
-terra(a: num)
+terra(a: num) : num
 	return num(cmath.floor(a:val()))
 end)
 
