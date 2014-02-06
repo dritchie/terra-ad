@@ -30,12 +30,12 @@ initGlobals()
 
 -- =============== DUAL NUMBER TYPE GENERATION ===============
 
--- Generate a list of expression that refer to sequential anonymous
+-- Generate a list of expression that refer to sequential `anonymous'
 -- fields in a struct instance
 local function makeFieldExpList(obj, numFields)
 	local fields = {}
 	for i=1,numFields do
-		table.insert(fields, `obj.[string.format("_%d", i-1+2)])
+		table.insert(fields, `obj.[string.format("_%d", i-1)])
 	end
 	return fields
 end
@@ -50,10 +50,9 @@ local DualNum = templatize(function (...)
 	}
 
 	-- Add extra entries from the argument type list
-	-- These 'anonymous' fields will be named _0, _1, etc.
 	local numExtraFields = select("#",...)
 	for i=1,numExtraFields do
-		table.insert(DualNumT.entries, (select(i,...)))
+		table.insert(DualNumT.entries, {field = string.format("_%d", i-1), type = (select(i,...))})
 	end
 
 	-- All dual nums are allocated from the memory pool
@@ -286,7 +285,7 @@ local function adjoint(fntemp)
 			for i,arg in ipairs(adjfnparams) do
 				if i ~= 1 then
 					if usedargtable[arg.symbol] then
-						local exp = `[arg.type] { dnum.[string.format("_%d", currFieldIndex+2)] }
+						local exp = `[arg.type] { dnum.[string.format("_%d", currFieldIndex)] }
 						table.insert(argstoadjfn, exp)
 						currFieldIndex = currFieldIndex + 1
 					else
