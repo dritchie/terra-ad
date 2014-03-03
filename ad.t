@@ -1,5 +1,6 @@
 local templatize = terralib.require("templatize")
 local Vector = terralib.require("vector")
+local Grid2D = terralib.require("grid").Grid2D
 local util = terralib.require("util")
 local MemoryPool = terralib.require("memoryPool")
 
@@ -27,6 +28,7 @@ local terra initGlobals()
 end
 
 initGlobals()
+
 
 -- =============== DUAL NUMBER TYPE GENERATION ===============
 
@@ -682,20 +684,49 @@ end
 -- Compute the gradient of self w.r.t all other variables
 -- Until the next arithmetic op on a num, the adjoints for all other variables
 --    will still be correct (though memory has been released for re-use)
-terra num:grad()
+terra num:grad(clearTape: bool) : {}
 	grad(@self)
-	recoverMemory()
+	if clearTape then recoverMemory() end
+end
+terra num:grad() : {}
+	self:grad(true)
 end
 
 -- Compute the gradient of self w.r.t the given vector of
 -- variables and store the result in the given vector of doubles
-terra num:grad(indeps: &Vector(num), gradient: &Vector(double))
+terra num:grad(indeps: &Vector(num), gradient: &Vector(double), clearTape: bool) : {}
 	grad(@self)
 	gradient:resize(indeps.size)
 	for i=0,indeps.size do
 		gradient:set(i, indeps:get(i):adj())
 	end
-	recoverMemory()
+	if clearTape then recoverMemory() end
+end
+terra num:grad(indeps: &Vector(num), gradient: &Vector(double)) : {}
+	self:grad(indeps, gradient, true)
+end
+
+-- Compute the Jacobian of ys w.r.t. xs and store the result
+--    in J.
+local terra jacobian(ys: &Vector(num), xs: &Vector(num), J: &Grid2D(double), clearTape: bool) : {}
+	J:resize(ys.size, xs.size)
+	for i=0,ys.size do
+		-- Reset all the adjoints to zero
+		for j=0,tape.size do
+			var tapeEntry = tape:getPointer(j)
+			[&DualNumBase](tapeEntry.datum).adj = 0.0
+		end
+		-- Compute the gradient w.r.t this one variable
+		grad(ys(i))
+		-- Store the result in the ith row of J
+		for j=0,xs.size do
+			J(i,j) = xs(j).impl.adj
+		end
+	end
+	if clearTape then recoverMemory() end
+end
+terra jacobian(ys: &Vector(num), xs: &Vector(num), J: &Grid2D(double)) : {}
+	jacobian(ys, xs, J, true)
 end
 
 
@@ -706,6 +737,7 @@ return
 	num = num,
 	math = admath,
 	val = val,
+	jacobian = jacobian,
 	currTapeMemUsed = currTapeMemUsed,
 	maxTapeMemUsed = maxTapeMemUsed,
 	recoverMemory = recoverMemory,
