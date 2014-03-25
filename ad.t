@@ -171,9 +171,9 @@ end)
 -- (Performs a no-op if the variable is actually a constant)
 local accumadj = macro(function(output, v, adjval)
 	return quote
-		-- if adj(output) ~= 0.0 then
+		if adj(output) ~= 0.0 then
 			setadj(v, adj(v) + adj(output)*adjval)
-		-- end
+		end
 	end
 end)
 
