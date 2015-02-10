@@ -20,8 +20,8 @@ local terra fastpow(a: double, b: double)
 end
 
 
-local ad = terralib.require("ad")
-local Vector = terralib.require("vector")
+local ad = require("ad")
+local Vector = require("vector")
 
 local C = terralib.includecstring [[
 #include <stdio.h>

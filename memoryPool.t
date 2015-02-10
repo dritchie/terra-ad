@@ -2,9 +2,9 @@
 -- Re-implementation of stan's "stack_alloc.hpp" in pure Terra to allow for inlining.
 -- See STAN_ROOT/src/stan/memory/stack_alloc.hpp for more documentation.
 
-local Vector = terralib.require("vector")
-local util = terralib.require("util")
-local m = terralib.require("mem")
+local Vector = require("vector")
+local util = require("util")
+local m = require("mem")
 
 local C = terralib.includecstring [[
 #include <stdio.h>

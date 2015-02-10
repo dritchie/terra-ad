@@ -1,6 +1,6 @@
 
-local ad = terralib.require("ad")
-local util = terralib.require("util")
+local ad = require("ad")
+local util = require("util")
 
 C = terralib.includecstring [[
 	#include <stdio.h>

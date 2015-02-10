@@ -1,10 +1,10 @@
 
-local ad = terralib.require("ad")
+local ad = require("ad")
 local cstdio = terralib.includec("stdio.h")
 local cmath = terralib.includec("math.h")
-local Vector = terralib.require("vector")
-local util = terralib.require("util")
-local m = terralib.require("mem")
+local Vector = require("vector")
+local util = require("util")
+local m = require("mem")
 
 local num = ad.num
 local str = &int8

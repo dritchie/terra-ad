@@ -1,8 +1,8 @@
-local Vector = terralib.require("vector")
-local ad = terralib.require("ad")
+local Vector = require("vector")
+local ad = require("ad")
 local num = ad.num
-local m = terralib.require("mem")
-local util = terralib.require("util")
+local m = require("mem")
+local util = require("util")
 
 local C = terralib.includecstring [[
 #include <stdlib.h>

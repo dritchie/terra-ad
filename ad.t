@@ -1,8 +1,8 @@
-local templatize = terralib.require("templatize")
-local Vector = terralib.require("vector")
-local Grid2D = terralib.require("grid").Grid2D
-local util = terralib.require("util")
-local MemoryPool = terralib.require("memoryPool")
+local templatize = require("templatize")
+local Vector = require("vector")
+local Grid2D = require("grid").Grid2D
+local util = require("util")
+local MemoryPool = require("memoryPool")
 
 
 -- =============== GLOBALS ===============
